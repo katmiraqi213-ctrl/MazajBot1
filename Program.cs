@@ -9,7 +9,7 @@ namespace CSharpConsoleApp
 {
     public class Program
     {
-        private static IWolfClient? _client;
+        private static IWolfClient _client;
 
         public static async Task Main(string[] args)
         {
@@ -34,15 +34,17 @@ namespace CSharpConsoleApp
 
             _client.OnConnected += (_) =>
             {
-                Console.WriteLine("بوت مزاج متصل بـ WOLF!");
+                Console.WriteLine("Bot connected to WOLF!");
                 return Task.CompletedTask;
             };
 
             var result = await _client.Login(email, password);
 
-            Console.WriteLine(result
-                ? "تم تسجيل الدخول بنجاح!"
-                : "فشل تسجيل الدخول - تأكد من بيانات الحساب");
+            Console.WriteLine(
+                result
+                    ? "Login succeeded!"
+                    : "Login failed - check email and password"
+            );
 
             await Task.Delay(-1);
         }
@@ -60,33 +62,61 @@ namespace CSharpConsoleApp
     {
         public int TargetPoints;
         public int TeamCount;
-        public List<string> TeamNames = new();
-        public Dictionary<string, List<string>> Teams = new();
-        public Dictionary<string, int> Scores = new();
-        public List<MazajCard> Cards = new();
-        public bool Started;
-        public int CurrentTeamIndex;
 
-        public string CurrentTeam =>
-            TeamNames.Count == 0 ? "" : TeamNames[CurrentTeamIndex];
+        public List<string> TeamNames = new List<string>();
+
+        public Dictionary<string, List<string>> Teams =
+            new Dictionary<string, List<string>>();
+
+        public Dictionary<string, int> Scores =
+            new Dictionary<string, int>();
+
+        public List<MazajCard> Cards =
+            new List<MazajCard>();
+
+        public bool Started = false;
+
+        public int CurrentTeamIndex = 0;
+
+        public string CurrentTeam
+        {
+            get
+            {
+                if (TeamNames.Count == 0)
+                    return "";
+
+                if (CurrentTeamIndex >= TeamNames.Count)
+                    CurrentTeamIndex = 0;
+
+                return TeamNames[CurrentTeamIndex];
+            }
+        }
 
         public int TotalJoined =>
             Teams.Values.Sum(t => t.Count);
 
+        public int RemainingCards =>
+            Cards.Count(c => !c.Picked);
+
         public void NextTurn()
         {
-            if (TeamNames.Count > 0)
-                CurrentTeamIndex =
-                    (CurrentTeamIndex + 1) % TeamNames.Count;
+            if (TeamNames.Count == 0)
+                return;
+
+            CurrentTeamIndex =
+                (CurrentTeamIndex + 1) % TeamNames.Count;
         }
     }
 
     public class MazajGameCommands : WolfContext
     {
-        private static readonly Dictionary<long, MazajGame> Games = new();
-        private static readonly Random Random = new();
+        private static readonly Dictionary<long, MazajGame> Games =
+            new Dictionary<long, MazajGame>();
 
-        private static readonly string[] AllTeams =
+        private static readonly Random Random =
+            new Random();
+
+        private static readonly string[] AllColors =
         {
             "احمر",
             "ازرق",
@@ -94,11 +124,12 @@ namespace CSharpConsoleApp
             "بنفسجي"
         };
 
-        // الأسماء الخاصة التي أعطاها المستخدم
+        // الأسماء الخاصة التي طلبتها
         private static readonly Dictionary<string, int> SpecialCards =
-            new()
+            new Dictionary<string, int>
             {
                 { "ضربة الوحش محمد 🇮🇶❤️", 100 },
+
                 { "هولو وئام الفگر", -100 },
 
                 { "طاحج حضج توت 😂", -50 },
@@ -108,31 +139,36 @@ namespace CSharpConsoleApp
                 { "لولو التعبانه", -50 },
                 { "نواره السلبيه", -50 },
 
-                { "ضربة ابو حامد", -75 },
-                { "ضربة حمدي الوزير", -75 },
-                { "ضربة حيدر بنكه", -75 },
-                { "ضربة جمو موسيقى", -75 },
+                { "ضربة ابو حامد", -50 },
+                { "ضربة حمدي الوزير", -50 },
+                { "ضربة حيدر بنكه", -50 },
+                { "ضربة جمو موسيقى", -50 },
 
-                { "ضربة اساور صاروخ باليستي", 100 },
-                { "صاروخ ارض ارض", 100 },
-                { "ضربة علي القويه", 100 },
-                { "ضربة ابو جنه", 100 }
+                { "ضربة اساور صاروخ باليستي", 75 },
+                { "صاروخ ارض ارض", 75 },
+                { "ضربة علي القويه", 75 },
+                { "ضربة ابو جنه", 75 }
             };
 
         [Command("مزاج")]
         public async Task HandleMazaj(string message)
         {
-            long chatId = SourceId;
-            string userName = SourceSubscriber?.Name ?? "لاعب";
+            long chatId = this.SourceId;
 
-            string[] parts = (message ?? "")
+            string userName =
+                this.SourceSubscriber?.Name ?? "لاعب";
+
+            var parts = (message ?? "")
                 .Trim()
-                .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                .Split(
+                    ' ',
+                    StringSplitOptions.RemoveEmptyEntries
+                );
 
             if (parts.Length == 0)
             {
                 await SendReply(
-                    "أوامر مزاج:\n" +
+                    "اكتب أمر بعد !مزاج\n\n" +
                     "!مزاج جديد <النقاط> <عدد الفرق>\n" +
                     "!مزاج انضم <اللون>\n" +
                     "!مزاج تغيير <اللون>\n" +
@@ -142,10 +178,13 @@ namespace CSharpConsoleApp
                     "!مزاج بطاقات\n" +
                     "!مزاج مساعدة"
                 );
+
                 return;
             }
 
-            switch (parts[0])
+            string action = parts[0];
+
+            switch (action)
             {
                 case "جديد":
                     await CreateGame(chatId, parts);
@@ -178,18 +217,18 @@ namespace CSharpConsoleApp
 
                 default:
                     await SendReply(
-                        "الأمر غير معروف.\n" +
-                        "اكتب !مزاج مساعدة لعرض الأوامر."
+                        "أمر غير معروف.\n" +
+                        "اكتب !مزاج مساعدة"
                     );
                     break;
             }
         }
 
-        private async Task CreateGame(long chatId, string[] parts)
+        private async Task CreateGame(
+            long chatId,
+            string[] parts)
         {
-            if (parts.Length < 3 ||
-                !int.TryParse(ToEnglishNumbers(parts[1]), out int points) ||
-                !int.TryParse(ToEnglishNumbers(parts[2]), out int teamCount))
+            if (parts.Length < 3)
             {
                 await SendReply(
                     "الصيغة الصحيحة:\n" +
@@ -197,116 +236,193 @@ namespace CSharpConsoleApp
                     "مثال:\n" +
                     "!مزاج جديد 400 4"
                 );
+
+                return;
+            }
+
+            if (!TryParseNumber(parts[1], out int points))
+            {
+                await SendReply(
+                    "النقاط لازم تكون رقم."
+                );
+
+                return;
+            }
+
+            if (!TryParseNumber(parts[2], out int teamCount))
+            {
+                await SendReply(
+                    "عدد الفرق لازم يكون رقم."
+                );
+
                 return;
             }
 
             if (points <= 0)
             {
-                await SendReply("النقاط لازم تكون أكبر من صفر.");
+                await SendReply(
+                    "عدد النقاط لازم يكون أكبر من صفر."
+                );
+
                 return;
             }
 
             if (teamCount < 2 || teamCount > 4)
             {
-                await SendReply("عدد الفرق لازم يكون بين 2 و4.");
+                await SendReply(
+                    "عدد الفرق لازم يكون بين 2 و4."
+                );
+
                 return;
             }
 
             var game = new MazajGame
             {
                 TargetPoints = points,
-                TeamCount = teamCount,
-                Started = false,
-                CurrentTeamIndex = 0
+                TeamCount = teamCount
             };
 
             for (int i = 0; i < teamCount; i++)
             {
-                string team = AllTeams[i];
+                string color = AllColors[i];
 
-                game.TeamNames.Add(team);
-                game.Teams[team] = new List<string>();
-                game.Scores[team] = 0;
+                game.TeamNames.Add(color);
+                game.Teams[color] =
+                    new List<string>();
+
+                game.Scores[color] = 0;
             }
 
             CreateCards(game);
 
             Games[chatId] = game;
 
+            string teams =
+                string.Join(
+                    " - ",
+                    game.TeamNames);
+
             await SendReply(
-                $"🎭 لعبة مزاج جديدة!\n\n" +
-                $"🎯 النقاط: {points}\n" +
-                $"👥 الفرق: {string.Join(" - ", game.TeamNames)}\n" +
-                $"🃏 عدد البطاقات: 65\n\n" +
+                "🎭🔥 لعبة مزاج جديدة 🔥🎭\n\n" +
+                $"🎯 النقاط المطلوبة: {points}\n" +
+                $"👥 الفرق: {teams}\n" +
+                "🃏 عدد البطاقات: 65\n\n" +
                 "للانضمام:\n" +
-                "!مزاج انضم <اللون>"
+                "!مزاج انضم <اسم اللون>\n\n" +
+                "مثال:\n" +
+                "!مزاج انضم احمر"
             );
         }
 
-        private static void CreateCards(MazajGame game)
+        private void CreateCards(MazajGame game)
         {
             game.Cards.Clear();
 
-            var names = new List<string>();
+            var specialCards =
+                SpecialCards
+                    .OrderBy(x => Random.Next())
+                    .ToList();
 
-            // البطاقات الخاصة
-            foreach (var card in SpecialCards)
-                names.Add(card.Key);
+            int number = 1;
 
-            // إكمال العدد إلى 65 بطاقة
-            int normalNumber = 1;
-
-            while (names.Count < 65)
+            foreach (var special in specialCards)
             {
-                string name;
+                game.Cards.Add(
+                    new MazajCard
+                    {
+                        Number = number,
+                        Name = special.Key,
+                        Points = special.Value,
+                        Picked = false
+                    });
 
-                do
-                {
-                    name = Random.Next(0, 2) == 0
-                        ? $"ضربة عشوائية {normalNumber}"
-                        : $"بطاقة حظ {normalNumber}";
-
-                    normalNumber++;
-                }
-                while (names.Contains(name));
-
-                names.Add(name);
+                number++;
             }
 
-            // خلط أسماء البطاقات
-            names = names
-                .OrderBy(_ => Random.Next())
-                .ToList();
-
-            for (int i = 0; i < 65; i++)
+            string[] normalPositiveNames =
             {
-                string name = names[i];
+                "ضربة النجمة",
+                "الصاروخ السريع",
+                "ضربة الأبطال",
+                "الطلقة الذهبية",
+                "قوة الفريق",
+                "الضربة الملكية",
+                "الحظ الجميل",
+                "ضربة الصقر",
+                "النصر الكبير",
+                "ضربة البرق"
+            };
+
+            string[] normalNegativeNames =
+            {
+                "ضربة الحظ السيئ",
+                "تعطيل الحظ",
+                "ضربة المفاجأة",
+                "خصم مفاجئ",
+                "نحس البطاقة",
+                "الضربة الباردة",
+                "خسارة صغيرة",
+                "خصم الحظ",
+                "ضربة النحس",
+                "العثرة"
+            };
+
+            while (game.Cards.Count < 65)
+            {
+                bool positive =
+                    Random.Next(0, 2) == 0;
 
                 int value;
 
-                if (SpecialCards.TryGetValue(name, out int specialValue))
+                if (positive)
                 {
-                    value = specialValue;
+                    value = Random.Next(10, 101);
                 }
                 else
                 {
-                    // البطاقات العشوائية موجبة أو سالبة
-                    int[] values =
-                    {
-                        -100, -75, -50, -25,
-                        25, 50, 75, 100
-                    };
-
-                    value = values[Random.Next(values.Length)];
+                    value = -Random.Next(10, 101);
                 }
 
-                game.Cards.Add(new MazajCard
+                string name;
+
+                if (positive)
                 {
-                    Number = i + 1,
-                    Name = name,
-                    Points = value,
-                    Picked = false
-                });
+                    name =
+                        normalPositiveNames[
+                            Random.Next(
+                                normalPositiveNames.Length)];
+                }
+                else
+                {
+                    name =
+                        normalNegativeNames[
+                            Random.Next(
+                                normalNegativeNames.Length)];
+                }
+
+                game.Cards.Add(
+                    new MazajCard
+                    {
+                        Number = number,
+                        Name = name,
+                        Points = value,
+                        Picked = false
+                    });
+
+                number++;
+            }
+
+            // خلط البطاقات حتى لا تكون الأسماء المهمة
+            // بأرقام ثابتة
+            game.Cards =
+                game.Cards
+                    .OrderBy(x => Random.Next())
+                    .ToList();
+
+            // إعادة ترقيم البطاقات من 1 إلى 65
+            for (int i = 0; i < game.Cards.Count; i++)
+            {
+                game.Cards[i].Number = i + 1;
             }
         }
 
@@ -315,28 +431,36 @@ namespace CSharpConsoleApp
             string[] parts,
             string userName)
         {
-            if (!Games.TryGetValue(chatId, out var game))
+            if (!Games.ContainsKey(chatId))
             {
                 await SendReply(
                     "ماكو لعبة شغالة حالياً.\n" +
-                    "اكتب !مزاج جديد 400 4"
+                    "اكتب !مزاج جديد"
                 );
+
                 return;
             }
+
+            var game = Games[chatId];
 
             if (game.Started)
             {
                 await SendReply(
-                    "اللعبة بدت، ما تكدر تنضم أو تغير الفريق هسه."
+                    "اللعبة بدت، ما تكدر تنضم أو تغير الفريق."
                 );
+
                 return;
             }
 
             if (parts.Length < 2)
             {
                 await SendReply(
-                    $"حدد اللون:\n{string.Join(" - ", game.TeamNames)}"
+                    "حدد اللون:\n" +
+                    string.Join(
+                        " - ",
+                        game.TeamNames)
                 );
+
                 return;
             }
 
@@ -345,44 +469,58 @@ namespace CSharpConsoleApp
             if (!game.Teams.ContainsKey(team))
             {
                 await SendReply(
-                    $"هذا الفريق غير موجود.\n" +
-                    $"المتاح: {string.Join(" - ", game.TeamNames)}"
+                    "هذا اللون غير موجود.\n" +
+                    "الألوان:\n" +
+                    string.Join(
+                        " - ",
+                        game.TeamNames)
                 );
+
                 return;
             }
 
             foreach (var players in game.Teams.Values)
+            {
                 players.Remove(userName);
+            }
 
-            if (!game.Teams[team].Contains(userName))
-                game.Teams[team].Add(userName);
+            game.Teams[team].Add(userName);
 
             await SendReply(
-                $"✅ {userName} انضم إلى فريق {team}."
+                $"👤 {userName}\n" +
+                $"انضم لفريق {team} ✅"
             );
         }
 
         private async Task ShowPlayers(long chatId)
         {
-            if (!Games.TryGetValue(chatId, out var game))
+            if (!Games.ContainsKey(chatId))
             {
-                await SendReply("ماكو لعبة شغالة حالياً.");
+                await SendReply(
+                    "ماكو لعبة شغالة حالياً."
+                );
+
                 return;
             }
+
+            var game = Games[chatId];
 
             string result =
                 $"👥 اللاعبين ({game.TotalJoined})\n\n";
 
-            foreach (string team in game.TeamNames)
+            foreach (var team in game.Teams)
             {
-                var players = game.Teams[team];
+                string players =
+                    team.Value.Count > 0
+                        ? string.Join(
+                            "، ",
+                            team.Value)
+                        : "لا يوجد";
 
                 result +=
-                    $"🔹 {team} ({players.Count}): " +
-                    (players.Count == 0
-                        ? "لا يوجد"
-                        : string.Join("، ", players)) +
-                    "\n";
+                    $"🔴 {team.Key} " +
+                    $"({team.Value.Count}): " +
+                    $"{players}\n";
             }
 
             await SendReply(result);
@@ -390,35 +528,54 @@ namespace CSharpConsoleApp
 
         private async Task StartGame(long chatId)
         {
-            if (!Games.TryGetValue(chatId, out var game))
-            {
-                await SendReply("ماكو لعبة شغالة حالياً.");
-                return;
-            }
-
-            var activeTeams = game.TeamNames
-                .Where(t => game.Teams[t].Count > 0)
-                .ToList();
-
-            if (activeTeams.Count < 2)
+            if (!Games.ContainsKey(chatId))
             {
                 await SendReply(
-                    "لازم يكون أكو لاعبين بفريقين على الأقل."
+                    "ماكو لعبة شغالة حالياً."
                 );
+
                 return;
             }
 
-            game.TeamNames = activeTeams;
+            var game = Games[chatId];
+
+            if (game.Started)
+            {
+                await SendReply(
+                    "اللعبة بدأت مسبقاً."
+                );
+
+                return;
+            }
+
+            var teamsWithPlayers =
+                game.Teams
+                    .Where(x => x.Value.Count > 0)
+                    .Select(x => x.Key)
+                    .ToList();
+
+            if (teamsWithPlayers.Count < 2)
+            {
+                await SendReply(
+                    "لازم يكون عندنا لاعبين بفريقين على الأقل."
+                );
+
+                return;
+            }
+
+            game.TeamNames =
+                teamsWithPlayers;
+
             game.Started = true;
             game.CurrentTeamIndex = 0;
 
             await SendReply(
-                "🔥 اللعبة بدأت!\n\n" +
-                $"🎯 الدور الآن على فريق: {game.CurrentTeam}\n\n" +
+                "🎭🔥 اللعبة بدأت 🔥🎭\n\n" +
+                $"الدور الآن على فريق: {game.CurrentTeam}\n\n" +
                 "اختاروا بطاقة:\n" +
                 "!مزاج اختار <رقم>\n\n" +
-                "مثال: !مزاج اختار 13\n" +
-                "أو: !مزاج اختار ١٣"
+                "مثال:\n" +
+                "!مزاج اختار 13"
             );
         }
 
@@ -427,11 +584,16 @@ namespace CSharpConsoleApp
             string[] parts,
             string userName)
         {
-            if (!Games.TryGetValue(chatId, out var game))
+            if (!Games.ContainsKey(chatId))
             {
-                await SendReply("ماكو لعبة شغالة حالياً.");
+                await SendReply(
+                    "ماكو لعبة شغالة حالياً."
+                );
+
                 return;
             }
+
+            var game = Games[chatId];
 
             if (!game.Started)
             {
@@ -439,19 +601,22 @@ namespace CSharpConsoleApp
                     "اللعبة لسه ما بدت.\n" +
                     "اكتب !مزاج بدء"
                 );
+
                 return;
             }
 
             string playerTeam =
                 game.Teams
-                    .FirstOrDefault(t => t.Value.Contains(userName))
+                    .FirstOrDefault(
+                        x => x.Value.Contains(userName))
                     .Key;
 
             if (string.IsNullOrEmpty(playerTeam))
             {
                 await SendReply(
-                    "أنت مو منضم لأي فريق."
+                    "انت مو منضم لأي فريق."
                 );
+
                 return;
             }
 
@@ -459,59 +624,60 @@ namespace CSharpConsoleApp
             {
                 await SendReply(
                     $"⏳ استنى دورك!\n" +
-                    $"الدور الآن على فريق {game.CurrentTeam}."
+                    $"الدور الآن على فريق {game.CurrentTeam}"
                 );
+
                 return;
             }
 
             if (parts.Length < 2)
             {
                 await SendReply(
-                    "اكتب رقم البطاقة.\n" +
+                    "حدد رقم البطاقة.\n" +
                     "مثال: !مزاج اختار 13"
                 );
+
                 return;
             }
 
-            string numberText = ToEnglishNumbers(parts[1]);
-
-            if (!int.TryParse(numberText, out int cardNumber))
+            if (!TryParseNumber(
+                    parts[1],
+                    out int cardNumber))
             {
                 await SendReply(
                     "رقم البطاقة غير صحيح."
                 );
+
                 return;
             }
 
-            if (cardNumber < 1 || cardNumber > 65)
+            if (cardNumber < 1 ||
+                cardNumber > game.Cards.Count)
             {
                 await SendReply(
-                    "رقم البطاقة لازم يكون بين 1 و65."
+                    $"رقم البطاقة لازم يكون بين 1 و {game.Cards.Count}."
                 );
+
                 return;
             }
 
-            MazajCard? card =
-                game.Cards.FirstOrDefault(c =>
-                    c.Number == cardNumber);
-
-            if (card == null)
-            {
-                await SendReply("البطاقة غير موجودة.");
-                return;
-            }
+            var card =
+                game.Cards
+                    .First(x => x.Number == cardNumber);
 
             if (card.Picked)
             {
                 await SendReply(
-                    "❌ هذي البطاقة مأخوذة، اختار بطاقة ثانية."
+                    "❌ هذه البطاقة مأخوذة، اختار بطاقة ثانية."
                 );
+
                 return;
             }
 
             card.Picked = true;
 
-            game.Scores[playerTeam] += card.Points;
+            game.Scores[playerTeam] +=
+                card.Points;
 
             string pointsText =
                 card.Points >= 0
@@ -519,74 +685,105 @@ namespace CSharpConsoleApp
                     : card.Points.ToString();
 
             await SendReply(
-                $"🃏 تم اختيار البطاقة {card.Number}\n\n" +
+                $"🃏 البطاقة رقم {card.Number}\n\n" +
                 $"🎭 {card.Name}\n" +
                 $"💰 النقاط: {pointsText}\n\n" +
-                $"🔵 فريق {playerTeam}: " +
+                $"فريق {playerTeam}: " +
                 $"{game.Scores[playerTeam]} نقطة"
             );
 
-            if (game.Cards.All(c => c.Picked))
+            // الفوز إذا وصل فريق للنقاط المطلوبة
+            if (game.Scores[playerTeam] >=
+                game.TargetPoints)
             {
-                await EndGame(chatId);
+                await EndGame(
+                    chatId,
+                    $"وصل فريق {playerTeam} إلى " +
+                    $"{game.TargetPoints} نقطة.");
+
+                return;
+            }
+
+            if (game.RemainingCards == 0)
+            {
+                await EndGame(
+                    chatId,
+                    "خلصت جميع البطاقات.");
+
                 return;
             }
 
             game.NextTurn();
 
             await SendReply(
-                $"🔄 الدور الآن على فريق: {game.CurrentTeam}"
+                $"🔄 الدور الآن على فريق: " +
+                $"{game.CurrentTeam}"
             );
         }
 
         private async Task ShowCards(long chatId)
         {
-            if (!Games.TryGetValue(chatId, out var game))
+            if (!Games.ContainsKey(chatId))
             {
-                await SendReply("ماكو لعبة شغالة حالياً.");
+                await SendReply(
+                    "ماكو لعبة شغالة حالياً."
+                );
+
                 return;
             }
 
-            string result = "🃏 بطاقات مزاج\n\n";
+            var game = Games[chatId];
+
+            string result =
+                "🃏 بطاقات مزاج\n\n";
 
             foreach (var card in game.Cards)
             {
-                result += card.Picked
-                    ? $"❌ {card.Number}\n"
-                    : $"🟢 {card.Number}\n";
+                result +=
+                    card.Picked
+                        ? $"{card.Number}: ✕\n"
+                        : $"{card.Number}: 🃏\n";
             }
+
+            result +=
+                $"\nالمتبقي: {game.RemainingCards}";
 
             if (game.Started)
             {
                 result +=
-                    $"\n🎯 الدور: {game.CurrentTeam}";
+                    $"\nالدور: {game.CurrentTeam}";
             }
 
             await SendReply(result);
         }
 
-        private async Task EndGame(long chatId)
+        private async Task EndGame(
+            long chatId,
+            string reason)
         {
-            if (!Games.TryGetValue(chatId, out var game))
-                return;
+            var game = Games[chatId];
 
-            var standings =
+            var sorted =
                 game.Scores
                     .OrderByDescending(x => x.Value)
                     .ToList();
 
-            string winner = standings[0].Key;
+            string winner =
+                sorted.First().Key;
 
-            string scores = string.Join(
-                "\n",
-                standings.Select(x =>
-                    $"🏆 {x.Key}: {x.Value} نقطة")
-            );
+            string standings =
+                string.Join(
+                    "\n",
+                    sorted.Select(
+                        x =>
+                            $"{x.Key}: {x.Value} نقطة"));
 
             await SendReply(
-                "🏁 انتهت لعبة مزاج!\n\n" +
-                scores +
-                $"\n\n🥇 الفائز: {winner}"
+                "🏆🎭 انتهت لعبة مزاج 🎭🏆\n\n" +
+                $"{reason}\n\n" +
+                "📊 النتائج:\n" +
+                $"{standings}\n\n" +
+                $"👑 الفريق الفائز: {winner}"
             );
 
             Games.Remove(chatId);
@@ -595,44 +792,50 @@ namespace CSharpConsoleApp
         private async Task ShowHelp()
         {
             await SendReply(
-                "🎭 أوامر بوت مزاج\n\n" +
+                "🎭 أوامر بوت مزاج 🎭\n\n" +
 
-                "!مزاج جديد 400 4\n" +
-                "إنشاء لعبة بـ400 نقطة و4 فرق\n\n" +
+                "🆕 إنشاء لعبة:\n" +
+                "!مزاج جديد <النقاط> <الفرق>\n\n" +
 
-                "!مزاج انضم احمر\n" +
-                "الانضمام إلى فريق\n\n" +
+                "👥 الانضمام:\n" +
+                "!مزاج انضم <اللون>\n\n" +
 
-                "!مزاج تغيير ازرق\n" +
-                "تغيير الفريق\n\n" +
+                "🔄 تغيير الفريق:\n" +
+                "!مزاج تغيير <اللون>\n\n" +
 
-                "!مزاج لاعبين\n" +
-                "عرض اللاعبين\n\n" +
+                "👤 اللاعبين:\n" +
+                "!مزاج لاعبين\n\n" +
 
-                "!مزاج بدء\n" +
-                "بدء اللعبة\n\n" +
+                "▶️ بدء اللعبة:\n" +
+                "!مزاج بدء\n\n" +
 
-                "!مزاج بطاقات\n" +
-                "عرض البطاقات المتاحة\n\n" +
+                "🃏 اختيار بطاقة:\n" +
+                "!مزاج اختار <رقم>\n\n" +
 
-                "!مزاج اختار 13\n" +
-                "!مزاج اختار ١٣\n" +
-                "اختيار بطاقة\n\n" +
+                "📋 عرض البطاقات:\n" +
+                "!مزاج بطاقات\n\n" +
 
-                "الفرق:\n" +
-                "🔴 احمر\n" +
-                "🔵 ازرق\n" +
-                "🟡 اصفر\n" +
-                "🟣 بنفسجي"
+                "❓ المساعدة:\n" +
+                "!مزاج مساعدة\n\n" +
+
+                "🎨 الألوان:\n" +
+                "احمر - ازرق - اصفر - بنفسجي\n\n" +
+
+                "🔢 يقبل البوت الأرقام العربية والإنكليزية."
             );
         }
 
-        private static string ToEnglishNumbers(string text)
+        // يحول:
+        // ١٢٣٤٥٦٧٨٩٠
+        // إلى:
+        // 1234567890
+        private static string NormalizeArabicNumbers(
+            string input)
         {
-            if (string.IsNullOrEmpty(text))
-                return text;
+            if (string.IsNullOrEmpty(input))
+                return input;
 
-            return text
+            return input
                 .Replace('٠', '0')
                 .Replace('١', '1')
                 .Replace('٢', '2')
@@ -645,9 +848,22 @@ namespace CSharpConsoleApp
                 .Replace('٩', '9');
         }
 
+        private static bool TryParseNumber(
+            string input,
+            out int number)
+        {
+            string normalized =
+                NormalizeArabicNumbers(
+                    input.Trim());
+
+            return int.TryParse(
+                normalized,
+                out number);
+        }
+
         private async Task SendReply(string text)
         {
-            await Reply(text);
+            await this.Reply(text);
         }
     }
 }
