@@ -11,26 +11,17 @@ namespace MazajBot
     {
         private static IWolfClient? _client;
         private static MazajGame? _game;
-
-        // منع معالجة نفس الرسالة أكثر من مرة
         private static readonly HashSet<string> _processedMessages = new();
         private static readonly object _messageLock = new();
 
         public static async Task Main(string[] args)
         {
-            string email =
-                Environment.GetEnvironmentVariable("WOLF_EMAIL") ?? "";
+            string email = Environment.GetEnvironmentVariable("WOLF_EMAIL") ?? "";
+            string password = Environment.GetEnvironmentVariable("WOLF_PASSWORD") ?? "";
 
-            string password =
-                Environment.GetEnvironmentVariable("WOLF_PASSWORD") ?? "";
-
-            if (string.IsNullOrWhiteSpace(email) ||
-                string.IsNullOrWhiteSpace(password))
+            if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
             {
-                Console.WriteLine(
-                    "❌ WOLF_EMAIL أو WOLF_PASSWORD غير موجود."
-                );
-
+                Console.WriteLine("❌ WOLF_EMAIL أو WOLF_PASSWORD غير موجود.");
                 return;
             }
 
@@ -42,107 +33,61 @@ namespace MazajBot
             {
                 try
                 {
-                    // منع التكرار
-                    string messageKey =
-                        !string.IsNullOrWhiteSpace(message.MessageId)
-                            ? message.MessageId
-                            : $"{message.UserId}|{message.GroupId}|{message.Content}|{message.Timestamp.Ticks}";
-
-                    lock (_messageLock)
+                    // منع معالجة نفس الرسالة مرتين
+                    if (!string.IsNullOrWhiteSpace(message.MessageId))
                     {
-                        if (_processedMessages.Contains(messageKey))
+                        lock (_messageLock)
                         {
-                            return;
-                        }
+                            if (!_processedMessages.Add(message.MessageId))
+                                return;
 
-                        _processedMessages.Add(messageKey);
-
-                        // منع نمو الذاكرة بشكل غير محدود
-                        if (_processedMessages.Count > 5000)
-                        {
-                            _processedMessages.Clear();
+                            if (_processedMessages.Count > 5000)
+                                _processedMessages.Clear();
                         }
                     }
 
-                    string text =
-                        message.Content?.Trim() ?? "";
+                    string text = message.Content?.Trim() ?? "";
 
-                    // ==========================================
-                    // الرقم المباشر
-                    // ==========================================
-
+                    // الرقم المباشر يعمل فقط أثناء اللعبة
+                    // وللاعب صاحب الدور فقط
                     if (TryParseNumber(text, out int directNumber))
                     {
-                        // قبل بدء اللعبة يتم تجاهل الرقم
                         if (_game != null && _game.Started)
-                        {
-                            await ChooseCard(
-                                client,
-                                message,
-                                directNumber,
-                                true
-                            );
-                        }
+                            await ChooseCard(client, message, directNumber, true);
 
                         return;
                     }
 
-                    // ==========================================
                     // أوامر مزاج
-                    // ==========================================
-
-                    if (!text.StartsWith(
-                        "!مزاج",
-                        StringComparison.OrdinalIgnoreCase))
-                    {
+                    if (!text.StartsWith("!مزاج", StringComparison.OrdinalIgnoreCase))
                         return;
-                    }
 
-                    string command =
-                        text.Length > 5
-                            ? text.Substring(5).Trim()
-                            : "";
+                    string command = text.Length > 5
+                        ? text.Substring(5).Trim()
+                        : "";
 
-                    await HandleCommand(
-                        client,
-                        message,
-                        command
-                    );
+                    await HandleCommand(client, message, command);
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine(
-                        "❌ COMMAND ERROR: " + ex
-                    );
+                    Console.WriteLine("COMMAND ERROR: " + ex.Message);
                 }
             };
 
-            // تسجيل الدخول
-            bool loginResult =
-                await _client.Login(email, password);
+            bool loginResult = await _client.Login(email, password);
 
             if (!loginResult)
             {
-                Console.WriteLine(
-                    "❌ فشل تسجيل الدخول إلى Wolf."
-                );
-
+                Console.WriteLine("❌ فشل تسجيل الدخول إلى Wolf.");
                 return;
             }
 
-            Console.WriteLine(
-                "✅ تم تسجيل الدخول."
-            );
+            Console.WriteLine("✅ تم تسجيل الدخول إلى Wolf.");
 
             await _client.Connect();
 
-            Console.WriteLine(
-                "🚀 البوت يعمل الآن."
-            );
-
-            await Task.Delay(
-                Timeout.Infinite
-            );
+            // إبقاء البوت يعمل
+            await Task.Delay(Timeout.Infinite);
         }
 
         // =========================================================
@@ -154,11 +99,10 @@ namespace MazajBot
             Message message,
             string command)
         {
-            string[] parts =
-                command.Split(
-                    ' ',
-                    StringSplitOptions.RemoveEmptyEntries
-                );
+            string[] parts = command.Split(
+                ' ',
+                StringSplitOptions.RemoveEmptyEntries
+            );
 
             if (parts.Length == 0)
             {
@@ -166,8 +110,7 @@ namespace MazajBot
                 return;
             }
 
-            string action =
-                parts[0].ToLowerInvariant();
+            string action = parts[0].ToLowerInvariant();
 
             switch (action)
             {
@@ -176,40 +119,24 @@ namespace MazajBot
                     break;
 
                 case "انضم":
-                    await JoinTeam(
-                        client,
-                        message,
-                        parts
-                    );
+                    await JoinTeam(client, message, parts);
                     break;
 
                 case "تغيير":
-                    await ChangeTeam(
-                        client,
-                        message,
-                        parts
-                    );
+                    await ChangeTeam(client, message, parts);
                     break;
 
                 case "لاعبين":
-                    await ShowPlayers(
-                        client,
-                        message
-                    );
+                    await ShowPlayers(client, message);
                     break;
 
                 case "بدء":
-                    await StartGame(
-                        client,
-                        message
-                    );
+                    await StartGame(client, message);
                     break;
 
                 case "اختار":
                     if (parts.Length >= 2 &&
-                        TryParseNumber(
-                            parts[1],
-                            out int number))
+                        TryParseNumber(parts[1], out int number))
                     {
                         await ChooseCard(
                             client,
@@ -222,39 +149,29 @@ namespace MazajBot
                     {
                         await client.Reply(
                             message,
-                            "❌ الاستخدام:\n!مزاج اختار <رقم>"
+                            "❌ استخدم:\n!مزاج اختار <رقم>"
                         );
                     }
 
                     break;
 
                 case "بطاقات":
-                    await ShowCards(
-                        client,
-                        message
-                    );
+                    await ShowCards(client, message);
                     break;
 
                 case "انهاء":
-                    await EndGame(
-                        client,
-                        message
-                    );
+                    await EndGame(client, message);
                     break;
 
                 case "مساعدة":
                 case "help":
-                    await SendHelp(
-                        client,
-                        message
-                    );
+                    await SendHelp(client, message);
                     break;
 
                 default:
                     await client.Reply(
                         message,
-                        "❌ أمر غير معروف.\n" +
-                        "اكتب !مزاج مساعدة"
+                        "❌ أمر غير معروف.\nاكتب !مزاج مساعدة"
                     );
                     break;
             }
@@ -262,6 +179,9 @@ namespace MazajBot
 
         // =========================================================
         // إنشاء لعبة
+        // فريقان فقط
+        // 400 نقطة لكل فريق
+        // 65 بطاقة
         // =========================================================
 
         private static async Task NewGame(
@@ -281,41 +201,20 @@ namespace MazajBot
 
             _game = new MazajGame();
 
-            _game.GroupId =
-                message.GroupId ?? "";
-
-            // صاحب اللعبة يدخل تلقائياً بالأحمر
-            string userId =
-                message.UserId;
-
-            string nickname =
-                await GetNickname(
-                    client,
-                    userId
-                );
-
-            Team redTeam =
-                _game.Teams[0];
-
-            redTeam.Players[userId] =
-                nickname;
+            _game.GroupId = message.GroupId ?? "";
 
             await client.Reply(
                 message,
                 "🎭🔥 تم إنشاء لعبة مزاج!\n\n" +
-                "💰 البداية: 400 نقطة لكل فريق\n" +
+                "🟥 الفريق الأحمر: 400 نقطة\n" +
+                "🟦 الفريق الأزرق: 400 نقطة\n" +
                 "🎴 البطاقات: 65\n" +
-                "🟢 البطاقات الموجبة: 57\n" +
-                "🔴 البطاقات السالبة: 8\n" +
-                "⏱️ وقت الدور: 25 ثانية\n\n" +
-                "👤 أنت دخلت تلقائياً:\n" +
-                "🟥 الفريق الأحمر\n\n" +
-                "📌 الانضمام:\n" +
+                "➕ 57 بطاقة موجبة\n" +
+                "➖ 8 بطاقات سالبة\n\n" +
+                "📌 للانضمام:\n" +
                 "!مزاج انضم احمر\n" +
                 "!مزاج انضم ازرق\n\n" +
-                "📌 تغيير الفريق:\n" +
-                "!مزاج تغيير ازرق\n\n" +
-                "📌 بعد اكتمال الفريقين:\n" +
+                "📌 وبعد اكتمال اللاعبين:\n" +
                 "!مزاج بدء"
             );
         }
@@ -354,42 +253,33 @@ namespace MazajBot
                 await client.Reply(
                     message,
                     "❌ الاستخدام:\n" +
-                    "!مزاج انضم احمر\n" +
-                    "!مزاج انضم ازرق"
+                    "!مزاج انضم <احمر|ازرق>"
                 );
 
                 return;
             }
 
-            string teamName =
-                NormalizeTeam(parts[1]);
+            string teamName = NormalizeTeam(parts[1]);
 
-            Team? team =
-                _game.Teams.FirstOrDefault(
-                    x => x.Name == teamName
-                );
+            Team? team = _game.Teams.FirstOrDefault(
+                x => x.Name == teamName
+            );
 
             if (team == null)
             {
                 await client.Reply(
                     message,
-                    "❌ الفريق غير موجود.\n" +
-                    "المتاح: احمر أو ازرق"
+                    "❌ الفريق غير موجود. المتاح: احمر أو ازرق."
                 );
 
                 return;
             }
 
-            string userId =
-                message.UserId;
+            string userId = message.UserId;
 
             string nickname =
-                await GetNickname(
-                    client,
-                    userId
-                );
+                await GetNickname(client, userId);
 
-            // إذا موجود مسبقاً
             foreach (Team existingTeam in _game.Teams)
             {
                 if (existingTeam.Players.ContainsKey(userId))
@@ -397,15 +287,15 @@ namespace MazajBot
                     await client.Reply(
                         message,
                         $"⚠️ أنت منضم مسبقاً إلى " +
-                        $"{existingTeam.Emoji} {existingTeam.Name}."
+                        $"{existingTeam.Emoji} " +
+                        $"{existingTeam.Name}."
                     );
 
                     return;
                 }
             }
 
-            team.Players[userId] =
-                nickname;
+            team.Players[userId] = nickname;
 
             await client.Reply(
                 message,
@@ -449,8 +339,7 @@ namespace MazajBot
                 await client.Reply(
                     message,
                     "❌ الاستخدام:\n" +
-                    "!مزاج تغيير احمر\n" +
-                    "!مزاج تغيير ازرق"
+                    "!مزاج تغيير <احمر|ازرق>"
                 );
 
                 return;
@@ -474,14 +363,10 @@ namespace MazajBot
                 return;
             }
 
-            string userId =
-                message.UserId;
+            string userId = message.UserId;
 
             string nickname =
-                await GetNickname(
-                    client,
-                    userId
-                );
+                await GetNickname(client, userId);
 
             foreach (Team team in _game.Teams)
             {
@@ -593,17 +478,13 @@ namespace MazajBot
                 return;
             }
 
-            // لازم كل فريق بيه لاعب
             if (_game.Teams.Any(
                 x => x.Players.Count == 0))
             {
                 await client.Reply(
                     message,
-                    "❌ يجب أن يكون في كل فريق لاعب واحد على الأقل.\n\n" +
-                    "🟥 الأحمر: " +
-                    $"{_game.Teams[0].Players.Count}\n" +
-                    "🟦 الأزرق: " +
-                    $"{_game.Teams[1].Players.Count}"
+                    "❌ يجب أن يكون في كل فريق " +
+                    "لاعب واحد على الأقل."
                 );
 
                 return;
@@ -611,11 +492,9 @@ namespace MazajBot
 
             _game.TurnOrder.Clear();
 
-            // ترتيب اللاعبين حسب الفريق
             foreach (Team team in _game.Teams)
             {
-                foreach (
-                    string userId
+                foreach (string userId
                     in team.Players.Keys)
                 {
                     _game.TurnOrder.Add(userId);
@@ -636,23 +515,18 @@ namespace MazajBot
             _game.CurrentPlayerIndex = 0;
             _game.TurnVersion++;
 
-            string firstPlayer =
-                _game.CurrentPlayerName;
-
-            string result =
-                "🎭🔥 مــــزاج 🔥🎭\n\n" +
-                "🏁 بدأت اللعبة!\n\n" +
-                BuildScoreBoard(_game) +
-                "\n\n" +
-                "🎴 لوحة الأرقام\n" +
-                BuildCardBoard(_game) +
-                "\n\n" +
-                $"👤 الدور على: {firstPlayer}\n" +
-                "⏱️ عندك 25 ثانية";
-
             await client.Reply(
                 message,
-                result
+                "🎭🔥 بدأت لعبة مزاج!\n\n" +
+                $"👥 عدد اللاعبين: " +
+                $"{_game.TurnOrder.Count}"
+            );
+
+            await SendBoards(
+                client,
+                message,
+                _game,
+                _game.CurrentPlayerName
             );
 
             _ = StartTurnTimer(
@@ -677,17 +551,16 @@ namespace MazajBot
                 return;
             }
 
-            MazajGame game =
-                _game;
+            MazajGame game = _game;
 
-            // الرقم خارج المدى
             if (number < 1 || number > 65)
             {
                 if (!directNumber)
                 {
                     await client.Reply(
                         message,
-                        "❌ رقم البطاقة يجب أن يكون من 1 إلى 65."
+                        "❌ رقم البطاقة يجب أن يكون " +
+                        "من 1 إلى 65."
                     );
                 }
 
@@ -697,7 +570,7 @@ namespace MazajBot
             string userId =
                 message.UserId;
 
-            // غير مشارك
+            // اللاعب غير مشارك
             if (!game.TurnOrder.Contains(userId))
             {
                 if (!directNumber)
@@ -714,13 +587,14 @@ namespace MazajBot
             // ليس دوره
             if (game.CurrentPlayerId != userId)
             {
-                // الرقم المباشر يتجاهل بصمت
+                // الرقم المباشر يتم تجاهله بصمت
                 if (!directNumber)
                 {
                     await client.Reply(
                         message,
                         $"⏳ ليس دورك.\n" +
-                        $"👤 الدور حالياً: {game.CurrentPlayerName}"
+                        $"👤 الدور حالياً: " +
+                        $"{game.CurrentPlayerName}"
                     );
                 }
 
@@ -733,9 +607,7 @@ namespace MazajBot
                 );
 
             if (card == null)
-            {
                 return;
-            }
 
             // البطاقة مستخدمة
             if (card.Used)
@@ -744,7 +616,7 @@ namespace MazajBot
                 {
                     await client.Reply(
                         message,
-                        "❌ هذه البطاقة مستخدمة مسبقاً."
+                        "❌ هذه البطاقة تم اختيارها مسبقاً."
                     );
                 }
 
@@ -755,139 +627,131 @@ namespace MazajBot
                 game.GetTeamByPlayer(userId);
 
             if (playerTeam == null)
-            {
                 return;
-            }
 
-            // تسجيل البطاقة
             card.Used = true;
 
-            string effectMessage;
+            Team affectedTeam;
+
+            string scoreMessage;
 
             if (card.Value > 0)
             {
-                // الموجب ينقص نقاط الخصم
-                foreach (Team team in game.Teams)
-                {
-                    if (team != playerTeam)
-                    {
-                        team.Score -= card.Value;
+                // الموجب يخصم من الخصم
+                affectedTeam =
+                    game.Teams.First(
+                        x => x != playerTeam
+                    );
 
-                        if (team.Score < 0)
-                        {
-                            team.Score = 0;
-                        }
-                    }
-                }
+                affectedTeam.Score =
+                    Math.Max(
+                        0,
+                        affectedTeam.Score -
+                        card.Value
+                    );
 
-                effectMessage =
-                    $"💥 {playerTeam.Emoji} " +
-                    $"{playerTeam.Name} ضرب الخصم " +
-                    $"بـ {card.Value} نقطة!";
+                scoreMessage =
+                    $"🎯 {playerTeam.Emoji} " +
+                    $"اختار البطاقة وربح " +
+                    $"{card.Value} على الفريق الخصم\n" +
+                    $"💥 {affectedTeam.Emoji} " +
+                    $"خسر {card.Value} نقطة";
             }
             else
             {
-                // السالب ينقص نقاط فريق اللاعب
+                // السالب يخصم من صاحب الدور
+                affectedTeam =
+                    playerTeam;
+
                 int loss =
                     Math.Abs(card.Value);
 
-                playerTeam.Score -= loss;
+                affectedTeam.Score =
+                    Math.Max(
+                        0,
+                        affectedTeam.Score -
+                        loss
+                    );
 
-                if (playerTeam.Score < 0)
-                {
-                    playerTeam.Score = 0;
-                }
-
-                effectMessage =
-                    $"💀 {playerTeam.Emoji} " +
-                    $"{playerTeam.Name} خسر " +
-                    $"{loss} نقطة!";
+                scoreMessage =
+                    $"💥 {playerTeam.Emoji} " +
+                    $"خسر {loss} نقطة " +
+                    "بسبب البطاقة السالبة";
             }
 
             game.TurnVersion++;
 
-            string result =
-                "🎭💍 مــــزاج\n\n" +
-                $"🎴 البطاقة رقم: {card.Number}\n" +
+            await client.Reply(
+                message,
+                "/me\n\n" +
+                $"🎴 تم اختيار البطاقة رقم " +
+                $"{card.Number}\n" +
                 $"🃏 {card.Name}\n" +
-                $"💰 القيمة: {FormatValue(card.Value)}\n\n" +
-                effectMessage +
-                "\n\n" +
-                BuildScoreBoard(game) +
-                "\n\n" +
-                "🎴 لوحة الأرقام\n" +
-                BuildCardBoard(game);
+                $"💰 القيمة: " +
+                $"{FormatValue(card.Value)}\n\n" +
+                scoreMessage
+            );
 
-            // =====================================================
-            // فوز / خسارة
-            // =====================================================
-
-            Team? loser =
-                game.Teams.FirstOrDefault(
-                    x => x.Score <= 0
-                );
-
-            if (loser != null)
+            // فوز/خسارة فريق
+            if (affectedTeam.Score <= 0)
             {
-                Team? winner =
-                    game.Teams.FirstOrDefault(
-                        x => x != loser
-                    );
-
                 game.Started = false;
                 game.TurnVersion++;
 
-                result +=
-                    "\n\n🏁 انتهت اللعبة!\n\n" +
-                    $"💀 الخاسر: {loser.Emoji} {loser.Name}\n";
+                await SendBoards(
+                    client,
+                    message,
+                    game,
+                    ""
+                );
 
-                if (winner != null)
-                {
-                    result +=
-                        $"👑 الفائز: {winner.Emoji} {winner.Name}\n";
-                }
-
-                result +=
-                    "\n" +
-                    BuildFinalResults(game);
-
-                _game = null;
+                Team winner =
+                    game.Teams.First(
+                        x => x != affectedTeam
+                    );
 
                 await client.Reply(
                     message,
-                    result
+                    $"🏁 انتهت اللعبة!\n\n" +
+                    $"💀 الفريق الخاسر: " +
+                    $"{affectedTeam.Emoji} " +
+                    $"{affectedTeam.Name}\n" +
+                    $"👑 الفائز: " +
+                    $"{winner.Emoji} " +
+                    $"{winner.Name}\n\n" +
+                    BuildFinalResults(game)
                 );
+
+                _game = null;
 
                 return;
             }
 
-            // =====================================================
-            // كل البطاقات انتهت
-            // =====================================================
-
+            // انتهت كل البطاقات
             if (game.AllCardsUsed)
             {
                 game.Started = false;
                 game.TurnVersion++;
 
-                result +=
-                    "\n\n🏁 انتهت كل البطاقات!\n\n" +
-                    BuildFinalResults(game);
-
-                _game = null;
+                await SendBoards(
+                    client,
+                    message,
+                    game,
+                    ""
+                );
 
                 await client.Reply(
                     message,
-                    result
+                    "🏁 انتهت كل البطاقات!\n\n" +
+                    BuildFinalResults(game)
                 );
+
+                _game = null;
 
                 return;
             }
 
-            // =====================================================
-            // اللاعب التالي
-            // =====================================================
-
+            // الدور التالي
             game.CurrentPlayerIndex++;
 
             if (game.CurrentPlayerIndex >=
@@ -899,14 +763,11 @@ namespace MazajBot
             string nextPlayer =
                 game.CurrentPlayerName;
 
-            result +=
-                "\n\n" +
-                $"👤 الدور التالي: {nextPlayer}\n" +
-                "⏱️ عندك 25 ثانية";
-
-            await client.Reply(
+            await SendBoards(
+                client,
                 message,
-                result
+                game,
+                nextPlayer
             );
 
             _ = StartTurnTimer(
@@ -956,16 +817,9 @@ namespace MazajBot
                     game.CurrentPlayerName;
 
                 string result =
-                    "⏰ انتهى الوقت!\n\n" +
-                    $"👤 اللاعب: {oldPlayer}\n" +
-                    "🚫 لم يتم اختيار بطاقة.\n\n" +
-                    BuildScoreBoard(game) +
-                    "\n\n" +
-                    "🎴 لوحة الأرقام\n" +
-                    BuildCardBoard(game) +
-                    "\n\n" +
-                    $"👤 الدور التالي: {nextPlayer}\n" +
-                    "⏱️ عندك 25 ثانية";
+                    $"⏰ انتهى وقت اللاعب: " +
+                    $"{oldPlayer}\n\n" +
+                    "🚫 لم يتم اختيار أي بطاقة.";
 
                 if (!string.IsNullOrWhiteSpace(
                     game.GroupId))
@@ -973,6 +827,12 @@ namespace MazajBot
                     await client.GroupMessage(
                         game.GroupId,
                         result
+                    );
+
+                    await SendBoardsToGroup(
+                        client,
+                        game,
+                        nextPlayer
                     );
                 }
 
@@ -984,10 +844,67 @@ namespace MazajBot
             catch (Exception ex)
             {
                 Console.WriteLine(
-                    "❌ TIMER ERROR: " +
+                    "TURN TIMER ERROR: " +
                     ex.Message
                 );
             }
+        }
+
+        // =========================================================
+        // إرسال اللوحتين بشكل منفصل
+        // =========================================================
+
+        private static async Task SendBoards(
+            IWolfClient client,
+            Message message,
+            MazajGame game,
+            string nextPlayer)
+        {
+            // لوحة النتائج منفصلة
+            await client.Reply(
+                message,
+                BuildScoreBoard(game)
+            );
+
+            // لوحة الأرقام منفصلة
+            await client.Reply(
+                message,
+                BuildCardBoard(game)
+            );
+
+            if (!string.IsNullOrWhiteSpace(
+                nextPlayer))
+            {
+                await client.Reply(
+                    message,
+                    $"👤 اللاعب التالي: " +
+                    $"{nextPlayer}\n" +
+                    "⏱️ عندك 25 ثانية تختار رقم"
+                );
+            }
+        }
+
+        private static async Task SendBoardsToGroup(
+            IWolfClient client,
+            MazajGame game,
+            string nextPlayer)
+        {
+            await client.GroupMessage(
+                game.GroupId,
+                BuildScoreBoard(game)
+            );
+
+            await client.GroupMessage(
+                game.GroupId,
+                BuildCardBoard(game)
+            );
+
+            await client.GroupMessage(
+                game.GroupId,
+                $"👤 اللاعب التالي: " +
+                $"{nextPlayer}\n" +
+                "⏱️ عندك 25 ثانية تختار رقم"
+            );
         }
 
         // =========================================================
@@ -1008,101 +925,95 @@ namespace MazajBot
                 return;
             }
 
-            MazajGame game =
-                _game;
+            MazajGame game = _game;
 
             game.Started = false;
             game.TurnVersion++;
 
-            string result =
-                "🛑 تم إنهاء لعبة مزاج.\n\n" +
-                BuildFinalResults(game);
-
-            _game = null;
+            await client.Reply(
+                message,
+                "🛑 تم إنهاء لعبة مزاج."
+            );
 
             await client.Reply(
                 message,
-                result
+                BuildFinalResults(game)
             );
+
+            _game = null;
         }
 
         // =========================================================
         // لوحة النتائج الصغيرة
+        // منفصلة عن لوحة الأرقام
         // =========================================================
 
         private static string BuildScoreBoard(
             MazajGame game)
         {
-            string result =
+            Team red = game.Teams[0];
+            Team blue = game.Teams[1];
+
+            return
                 "   💍 مزاج\n" +
-                "┌────────┐\n";
-
-            foreach (Team team in game.Teams)
-            {
-                string line =
-                    $"{team.Emoji} {team.Score}";
-
-                result +=
-                    $"│{CenterText(line, 8)}│\n";
-            }
-
-            result +=
+                "┌────────┐\n" +
+                $"│ {red.Emoji} {red.Score,3} │\n" +
+                $"│ {blue.Emoji} {blue.Score,3} │\n" +
                 "└────────┘";
-
-            return result;
         }
 
         // =========================================================
-        // لوحة الأرقام الدائرية
+        // لوحة الأرقام
+        // 7 أرقام بكل سطر
+        // 65 بطاقة
         // =========================================================
 
         private static string BuildCardBoard(
             MazajGame game)
         {
-            string[] lines =
+            string[] colors =
             {
-                "        01  02  03",
-                "     04  05  06  07",
-                "  08  09  10  11  12",
-                "13  14  15  💍  16  17",
-                "18  19  20  مــــزاج  21",
-                "22  23  24  25  26  27",
-                "  28  29  30  31  32",
-                "     33  34  35  36",
-                "  37  38  39  40  41",
-                "42  43  44  45  46  47",
-                "  48  49  50  51  52",
-                "     53  54  55  56",
-                "        57  58  59",
-                "           60  61",
-                "           62  63",
-                "              64",
-                "              65"
+                "🟥",
+                "🟦",
+                "🟨",
+                "🟪"
             };
 
-            // إذا البطاقة مستخدمة نبدل رقمها بـ ❌
+            List<string> rows = new();
+            List<string> current = new();
+
             for (int i = 1; i <= 65; i++)
             {
-                if (game.Cards[i - 1].Used)
-                {
-                    string number =
-                        i.ToString("00");
+                Card card =
+                    game.Cards[i - 1];
 
-                    for (int x = 0; x < lines.Length; x++)
-                    {
-                        lines[x] =
-                            lines[x].Replace(
-                                number,
-                                "❌ "
-                            );
-                    }
+                string display =
+                    card.Used
+                        ? "❌"
+                        : colors[(i - 1) % 4] + i;
+
+                current.Add(display);
+
+                if (current.Count == 7 ||
+                    i == 65)
+                {
+                    rows.Add(
+                        string.Join(
+                            " ",
+                            current
+                        )
+                    );
+
+                    current.Clear();
                 }
             }
 
-            return string.Join(
-                "\n",
-                lines
-            );
+            return
+                "💍 مـزاج\n\n" +
+                string.Join(
+                    "\n",
+                    rows
+                );
         }
 
         // =========================================================
@@ -1126,15 +1037,11 @@ namespace MazajBot
             string result =
                 "🎴 بطاقات لعبة مزاج\n\n";
 
-            foreach (Card card in _game.Cards)
+            foreach (Card card
+                in _game.Cards)
             {
-                string status =
-                    card.Used
-                        ? "❌"
-                        : "⭕";
-
                 result +=
-                    $"{status} {card.Number}. " +
+                    $"{card.Number}. " +
                     $"{card.Name} " +
                     $"({FormatValue(card.Value)})\n";
             }
@@ -1154,7 +1061,7 @@ namespace MazajBot
             Message message)
         {
             string help =
-                "🎭🔥 أوامر لعبة مــــزاج\n\n" +
+                "🎭🔥 أوامر لعبة مزاج\n\n" +
 
                 "🎮 إنشاء اللعبة:\n" +
                 "!مزاج جديد\n\n" +
@@ -1164,8 +1071,7 @@ namespace MazajBot
                 "!مزاج انضم ازرق\n\n" +
 
                 "🔄 تغيير الفريق:\n" +
-                "!مزاج تغيير احمر\n" +
-                "!مزاج تغيير ازرق\n\n" +
+                "!مزاج تغيير <الفريق>\n\n" +
 
                 "👥 اللاعبين:\n" +
                 "!مزاج لاعبين\n\n" +
@@ -1174,21 +1080,18 @@ namespace MazajBot
                 "!مزاج بدء\n\n" +
 
                 "🎴 اختيار البطاقة:\n" +
-                "اكتب الرقم مباشرة مثل:\n" +
-                "13\n\n" +
-
-                "أو:\n" +
-                "!مزاج اختار 13\n\n" +
+                "اكتب الرقم مباشرة مثل: 13\n" +
+                "أو !مزاج اختار 13\n\n" +
 
                 "🃏 عرض البطاقات:\n" +
                 "!مزاج بطاقات\n\n" +
 
-                "🛑 إنهاء اللعبة:\n" +
+                "🛑 إنهاء:\n" +
                 "!مزاج انهاء\n\n" +
 
-                "💰 البداية: 400 نقطة\n" +
-                "🎴 البطاقات: 65\n" +
-                "⏱️ الدور: 25 ثانية";
+                "⏱️ مدة الدور: 25 ثانية\n" +
+                "💰 البداية: 400 نقطة لكل فريق\n" +
+                "🎴 65 بطاقة: 57 موجبة و8 سالبة";
 
             await client.Reply(
                 message,
@@ -1206,35 +1109,27 @@ namespace MazajBot
             string result =
                 "🏆 النتائج النهائية\n\n";
 
-            List<Team> ranking =
-                game.Teams
-                    .OrderByDescending(
-                        x => x.Score)
-                    .ToList();
-
-            int place = 1;
-
-            foreach (Team team in ranking)
+            foreach (
+                Team team
+                in game.Teams.OrderByDescending(
+                    x => x.Score))
             {
                 result +=
-                    $"{place}. " +
                     $"{team.Emoji} " +
                     $"{team.Name} — " +
                     $"{team.Score} نقطة\n";
-
-                place++;
             }
 
-            if (ranking.Count > 0)
-            {
-                Team winner =
-                    ranking[0];
+            Team winner =
+                game.Teams
+                    .OrderByDescending(
+                        x => x.Score)
+                    .First();
 
-                result +=
-                    "\n👑 المتصدر: " +
-                    $"{winner.Emoji} " +
-                    $"{winner.Name}";
-            }
+            result +=
+                $"\n👑 الفائز: " +
+                $"{winner.Emoji} " +
+                $"{winner.Name}";
 
             return result;
         }
@@ -1246,21 +1141,18 @@ namespace MazajBot
         private static string NormalizeTeam(
             string value)
         {
-            return value
-                .Trim()
+            return value.Trim()
                 .ToLowerInvariant()
                 switch
-            {
-                "احمر" => "احمر",
-                "الأحمر" => "احمر",
-                "الاحمر" => "احمر",
+                {
+                    "احمر" => "احمر",
+                    "الأحمر" => "احمر",
 
-                "ازرق" => "ازرق",
-                "الأزرق" => "ازرق",
-                "الازرق" => "ازرق",
+                    "ازرق" => "ازرق",
+                    "الأزرق" => "ازرق",
 
-                _ => value.Trim()
-            };
+                    _ => value.Trim()
+                };
         }
 
         // =========================================================
@@ -1274,9 +1166,7 @@ namespace MazajBot
             number = 0;
 
             if (string.IsNullOrWhiteSpace(text))
-            {
                 return false;
-            }
 
             return int.TryParse(
                 text.Trim(),
@@ -1285,7 +1175,7 @@ namespace MazajBot
         }
 
         // =========================================================
-        // تنسيق القيمة
+        // تنسيق النقاط
         // =========================================================
 
         private static string FormatValue(
@@ -1294,34 +1184,6 @@ namespace MazajBot
             return value >= 0
                 ? $"+{value}"
                 : value.ToString();
-        }
-
-        // =========================================================
-        // توسيط النص
-        // =========================================================
-
-        private static string CenterText(
-            string text,
-            int width)
-        {
-            if (text.Length >= width)
-            {
-                return text.Substring(
-                    0,
-                    width
-                );
-            }
-
-            int left =
-                (width - text.Length) / 2;
-
-            int right =
-                width - text.Length - left;
-
-            return
-                new string(' ', left) +
-                text +
-                new string(' ', right);
         }
 
         // =========================================================
@@ -1346,7 +1208,7 @@ namespace MazajBot
             }
             catch
             {
-                // تجاهل الخطأ
+                // تجاهل الخطأ والعودة إلى ID
             }
 
             return userId;
@@ -1359,7 +1221,7 @@ namespace MazajBot
 
     public class MazajGame
     {
-        public int StartingScore { get; } = 400;
+        public int PointsPerCard { get; } = 400;
 
         public int TeamCount { get; } = 2;
 
@@ -1379,6 +1241,12 @@ namespace MazajBot
 
         public MazajGame()
         {
+            TurnOrder =
+                new List<string>();
+
+            Cards =
+                CreateCards();
+
             Teams =
                 new List<Team>
                 {
@@ -1393,11 +1261,10 @@ namespace MazajBot
                     )
                 };
 
-            TurnOrder =
-                new List<string>();
-
-            Cards =
-                CreateCards();
+            foreach (Team team in Teams)
+            {
+                team.Score = 400;
+            }
         }
 
         // =========================================================
@@ -1408,14 +1275,11 @@ namespace MazajBot
         {
             get
             {
-                if (TurnOrder.Count == 0)
-                {
-                    return "";
-                }
-
-                if (CurrentPlayerIndex < 0 ||
+                if (
+                    TurnOrder.Count == 0 ||
+                    CurrentPlayerIndex < 0 ||
                     CurrentPlayerIndex >=
-                    TurnOrder.Count)
+                        TurnOrder.Count)
                 {
                     return "";
                 }
@@ -1427,10 +1291,6 @@ namespace MazajBot
             }
         }
 
-        // =========================================================
-        // اسم اللاعب الحالي
-        // =========================================================
-
         public string CurrentPlayerName
         {
             get
@@ -1438,17 +1298,19 @@ namespace MazajBot
                 string userId =
                     CurrentPlayerId;
 
-                if (string.IsNullOrWhiteSpace(
-                    userId))
+                if (
+                    string.IsNullOrWhiteSpace(
+                        userId))
                 {
                     return "";
                 }
 
                 foreach (Team team in Teams)
                 {
-                    if (team.Players.TryGetValue(
-                        userId,
-                        out string? name))
+                    if (
+                        team.Players.TryGetValue(
+                            userId,
+                            out string? name))
                     {
                         return name;
                     }
@@ -1467,263 +1329,135 @@ namespace MazajBot
         {
             return Teams.FirstOrDefault(
                 x => x.Players.ContainsKey(
-                    userId)
+                    userId
+                )
             );
         }
 
         // =========================================================
-        // هل كل البطاقات مستخدمة؟
+        // هل انتهت البطاقات؟
         // =========================================================
 
-        public bool AllCardsUsed
-        {
-            get
-            {
-                return Cards.All(
-                    x => x.Used
-                );
-            }
-        }
+        public bool AllCardsUsed =>
+            Cards.All(x => x.Used);
 
         // =========================================================
-        // إنشاء 65 بطاقة
-        // 57 موجبة + 8 سالبة
+        // إنشاء البطاقات
+        // 57 موجبة + 8 سالبة = 65
         // =========================================================
 
         private static List<Card> CreateCards()
         {
-            List<Card> cards =
-                new List<Card>();
-
-            // ---------------------------------------------------------
-            // 57 بطاقة موجبة
-            // أعلى قيمة = 100
-            // ---------------------------------------------------------
-
-            int[] positiveValues =
-            {
-                100,
-                90,
-                85,
-                75,
-                70,
-                70,
-                68,
-                68,
-                66,
-                66,
-                64,
-                64,
-                62,
-                62,
-                60,
-                60,
-                58,
-                58,
-                56,
-                56,
-                54,
-                54,
-                52,
-                52,
-                50,
-                50,
-                48,
-                48,
-                46,
-                46,
-                44,
-                44,
-                42,
-                42,
-                40,
-                40,
-                38,
-                38,
-                36,
-                36,
-                34,
-                34,
-                32,
-                32,
-                30,
-                30,
-                28,
-                28,
-                26,
-                26,
-                24,
-                24,
-                22,
-                22,
-                20,
-                15,
-                10
-            };
-
-            // ---------------------------------------------------------
-            // 8 بطاقات سالبة
-            // ---------------------------------------------------------
-
-            int[] negativeValues =
-            {
-                -60,
-                -50,
-                -45,
-                -40,
-                -35,
-                -30,
-                -25,
-                -20
-            };
-
-            List<string> positiveNames =
-                new List<string>
+            List<(string Name, int Value)> data =
+                new()
                 {
-                    "ضربة الوحش محمد 🇮🇶❤️",
-                    "ضربة يوسف المهندس",
-                    "ضربة سرمد الوحش 🔥",
-                    "ضربة سند سوريا",
+                    ("ضربة الوحش محمد 🇮🇶❤️", 100),
+                    ("ضربة يوسف المهندس", 90),
+                    ("ضربة سرمد الوحش 🔥", 85),
 
-                    "ضربة ابو عماد",
-                    "ضربة حمدي الوزير",
-                    "ضربة حيدر بنكه",
-                    "ضربة جمو موسيقى",
-                    "ضربة اساور صاروخ باليستي",
-                    "صاروخ ارض ارض",
-                    "ضربة علي القويه",
-                    "ضربة ابو جنه",
+                    ("هولو وئام الفگر", 80),
+                    ("طاحج حضج توت 😂", 80),
+                    ("صخام بوجهك ايهاب", 75),
+                    ("سراوي تيتي لاتحل ولا تربط", 75),
+                    ("هذا حظ زوز", 70),
+                    ("لولو التعبانه", 70),
+                    ("نواره السلبيه", 65),
+                    ("ضربة ابو عماد", 65),
+                    ("ضربة حمدي الوزير", 60),
+                    ("ضربة حيدر بنكه", 60),
+                    ("ضربة جمو موسيقى", 55),
+                    ("ضربة اساور صاروخ باليستي", 55),
+                    ("صاروخ ارض ارض", 50),
+                    ("ضربة علي القويه", 50),
+                    ("ضربة ابو جنه", 45),
+                    ("ضربة سند سوريا", 45),
+                    ("ضربة مزاج", 40),
+                    ("حظك اليوم", 40),
+                    ("المفاجأة", 35),
+                    ("ضربة الحظ", 35),
+                    ("البطاقة الغامضة", 30),
+                    ("ضربة قوية", 30),
+                    ("ضربة خفيفة", 25),
+                    ("الحظ العاثر", 25),
+                    ("الحظ الجميل", 20),
+                    ("مفاجأة مزاج", 20),
+                    ("الضربة الأخيرة", 15),
+                    ("ضربة البرق", 15),
+                    ("ضربة النار", 10),
+                    ("ضربة الصدمة", 10),
+                    ("الضربة السرية", 5),
+                    ("بطاقة الحظ", 5),
 
-                    "ضربة مزاج",
-                    "حظك اليوم",
-                    "المفاجأة",
-                    "ضربة الحظ",
-                    "البطاقة الغامضة",
-                    "ضربة قوية",
-                    "ضربة خفيفة",
-                    "الحظ الجميل",
-                    "مفاجأة مزاج",
-                    "الضربة الأخيرة",
-                    "ضربة البرق",
-                    "ضربة النار",
-                    "ضربة الصدمة",
-                    "الضربة السرية",
-                    "بطاقة الحظ",
-                    "مفاجأة الفريق",
-                    "الضربة الكبرى"
+                    ("بطاقة مزاج 36", 10),
+                    ("بطاقة مزاج 37", 15),
+                    ("بطاقة مزاج 38", 20),
+                    ("بطاقة مزاج 39", 25),
+                    ("بطاقة مزاج 40", 30),
+                    ("بطاقة مزاج 41", 35),
+                    ("بطاقة مزاج 42", 40),
+                    ("بطاقة مزاج 43", 45),
+                    ("بطاقة مزاج 44", 50),
+                    ("بطاقة مزاج 45", 55),
+                    ("بطاقة مزاج 46", 60),
+                    ("بطاقة مزاج 47", 65),
+                    ("بطاقة مزاج 48", 70),
+                    ("بطاقة مزاج 49", 75),
+                    ("بطاقة مزاج 50", 80),
+                    ("بطاقة مزاج 51", 85),
+                    ("بطاقة مزاج 52", 90),
+                    ("بطاقة مزاج 53", 95),
+                    ("بطاقة مزاج 54", 100),
+                    ("بطاقة مزاج 55", 40),
+                    ("بطاقة مزاج 56", 50),
+                    ("بطاقة مزاج 57", 60),
+
+                    // 8 بطاقات سالبة
+                    ("بطاقة نحس 60", -20),
+                    ("بطاقة نحس 61", -25),
+                    ("بطاقة نحس 62", -30),
+                    ("بطاقة نحس 63", -35),
+                    ("بطاقة نحس 64", -40),
+                    ("بطاقة نحس 65", -45),
+                    ("بطاقة النحس الكبرى", -50),
+                    ("بطاقة النحس الأخيرة", -60)
                 };
 
-            // إكمال أسماء الموجبة إلى 57
-            while (
-                positiveNames.Count <
-                positiveValues.Length)
-            {
-                positiveNames.Add(
-                    "بطاقة مزاج"
-                );
-            }
-
-            // إضافة البطاقات الموجبة
-            for (int i = 0;
-                 i < positiveValues.Length;
-                 i++)
-            {
-                cards.Add(
-                    new Card(
-                        0,
-                        positiveNames[i],
-                        positiveValues[i]
-                    )
-                );
-            }
-
-            // ---------------------------------------------------------
-            // البطاقات السالبة
-            // ---------------------------------------------------------
-
-            string[] negativeNames =
-            {
-                "هولو وئام الفگر",
-                "طاحج حضج توت 😂",
-                "صخام بوجهك ايهاب",
-                "سراوي تيتي لاتحل ولا تربط",
-                "هذا حظ زوز",
-                "لولو التعبانه",
-                "نواره السلبيه",
-                "بطاقة النحس"
-            };
-
-            for (int i = 0;
-                 i < negativeValues.Length;
-                 i++)
-            {
-                cards.Add(
-                    new Card(
-                        0,
-                        negativeNames[i],
-                        negativeValues[i]
-                    )
-                );
-            }
-
             // التأكد من العدد
-            if (cards.Count != 65)
+            if (data.Count != 65)
             {
-                throw new Exception(
-                    $"خطأ: عدد البطاقات = {cards.Count} وليس 65."
+                throw new InvalidOperationException(
+                    "يجب أن تكون البطاقات 65 بالضبط."
                 );
             }
 
-            // التأكد من عدد الموجب
-            int positiveCount =
-                cards.Count(x => x.Value > 0);
-
-            if (positiveCount != 57)
+            // التأكد من 57 موجبة و8 سالبة
+            if (
+                data.Count(x => x.Value > 0) != 57 ||
+                data.Count(x => x.Value < 0) != 8)
             {
-                throw new Exception(
-                    $"خطأ: البطاقات الموجبة = {positiveCount} وليس 57."
+                throw new InvalidOperationException(
+                    "يجب أن تكون البطاقات 57 موجبة و8 سالبة."
                 );
             }
 
-            // التأكد من عدد السالب
-            int negativeCount =
-                cards.Count(x => x.Value < 0);
-
-            if (negativeCount != 8)
+            // لا توجد بطاقة فوق +100
+            if (data.Any(x => x.Value > 100))
             {
-                throw new Exception(
-                    $"خطأ: البطاقات السالبة = {negativeCount} وليس 8."
+                throw new InvalidOperationException(
+                    "لا توجد بطاقة موجبة أكبر من 100."
                 );
             }
 
-            // التأكد أن الأعلى 100
-            if (cards.Max(x => x.Value) != 100)
-            {
-                throw new Exception(
-                    "خطأ: أعلى بطاقة يجب أن تكون +100."
-                );
-            }
-
-            // خلط البطاقات
-            Random random =
-                new Random();
-
-            cards =
-                cards
-                    .OrderBy(
-                        _ => random.Next())
-                    .ToList();
-
-            // ترقيم 1 إلى 65
-            for (int i = 0;
-                 i < cards.Count;
-                 i++)
-            {
-                cards[i].Number =
-                    i + 1;
-            }
-
-            return cards;
+            return data
+                .Select(
+                    (x, index) =>
+                        new Card(
+                            index + 1,
+                            x.Name,
+                            x.Value
+                        )
+                )
+                .ToList();
         }
     }
 
@@ -1746,9 +1480,9 @@ namespace MazajBot
             string emoji)
         {
             Name = name;
+
             Emoji = emoji;
 
-            // البداية 400
             Score = 400;
 
             Players =
@@ -1762,7 +1496,7 @@ namespace MazajBot
 
     public class Card
     {
-        public int Number { get; set; }
+        public int Number { get; }
 
         public string Name { get; }
 
@@ -1776,8 +1510,11 @@ namespace MazajBot
             int value)
         {
             Number = number;
+
             Name = name;
+
             Value = value;
+
             Used = false;
         }
     }
