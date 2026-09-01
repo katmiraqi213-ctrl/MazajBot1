@@ -17,8 +17,10 @@ namespace CSharpConsoleApp
             string password = Environment.GetEnvironmentVariable("WOLF_PASSWORD") ?? "";
 
             if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
-            {
-                Console.WriteLine("WOLF_EMAIL و WOLF_PASSWORD غير موجودين.");
+            {string email = katm.iraqi21@gmail.com
+string password = katm.iraqi
+
+                
                 return;
             }
 
