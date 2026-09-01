@@ -1,0 +1,32 @@
+name: Mazaj Bot
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: تحميل المشروع
+        uses: actions/checkout@v4
+
+      - name: تثبيت .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: تثبيت الحزم
+        run: dotnet restore
+
+      - name: بناء المشروع
+        run: dotnet build --no-restore
+
+      - name: تشغيل بوت مزاج
+        env:
+          WOLF_EMAIL: ${{ secrets.WOLF_EMAIL }}
+          WOLF_PASSWORD: ${{ secrets.WOLF_PASSWORD }}
+        run: dotnet run --no-build
