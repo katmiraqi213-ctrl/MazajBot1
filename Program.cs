@@ -1,4 +1,4 @@
-sing SSystem;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -9,18 +9,23 @@ namespace CSharpConsoleApp
 {
     public class Program
     {
-        private static IWolfClient _client;
+        private static IWolfClient? _client;
 
         public static async Task Main(string[] args)
         {
-            string email = Environment.GetEnvironmentVariable("WOLF_EMAIL") ?? "";
-            string password = Environment.GetEnvironmentVariable("WOLF_PASSWORD") ?? "";
+            string email =
+                Environment.GetEnvironmentVariable("WOLF_EMAIL") ?? "";
 
-            if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
-            {string email = katm.iraqi21@gmail.com
-string password = katm.iraqi
+            string password =
+                Environment.GetEnvironmentVariable("WOLF_PASSWORD") ?? "";
 
-                
+            if (string.IsNullOrWhiteSpace(email) ||
+                string.IsNullOrWhiteSpace(password))
+            {
+                Console.WriteLine(
+                    "WOLF_EMAIL و WOLF_PASSWORD غير موجودين."
+                );
+
                 return;
             }
 
@@ -36,49 +41,62 @@ string password = katm.iraqi
 
             _client.OnConnected += (_) =>
             {
-                Console.WriteLine("Bot connected to WOLF!");
+                Console.WriteLine(
+                    "بوت مزاج متصل بـ WOLF!"
+                );
+
                 return Task.CompletedTask;
             };
 
-            var result = await _client.Login(email, password);
+            var result =
+                await _client.Login(email, password);
 
             Console.WriteLine(
                 result
-                    ? "Login succeeded!"
-                    : "Login failed - check email and password"
+                    ? "تم تسجيل الدخول بنجاح!"
+                    : "فشل تسجيل الدخول - تأكد من بيانات الحساب"
             );
 
             await Task.Delay(-1);
         }
     }
 
+    // ==============================
+    // بطاقة مزاج
+    // ==============================
+
     public class MazajCard
     {
         public int Number { get; set; }
+
         public string Name { get; set; } = "";
+
         public int Points { get; set; }
+
         public bool Picked { get; set; }
     }
+
+    // ==============================
+    // لعبة مزاج
+    // ==============================
 
     public class MazajGame
     {
         public int TargetPoints;
+
         public int TeamCount;
 
-        public List<string> TeamNames = new List<string>();
+        public List<string> TeamNames = new();
 
-        public Dictionary<string, List<string>> Teams =
-            new Dictionary<string, List<string>>();
+        public Dictionary<string, List<string>> Teams = new();
 
-        public Dictionary<string, int> Scores =
-            new Dictionary<string, int>();
+        public Dictionary<string, int> Scores = new();
 
-        public List<MazajCard> Cards =
-            new List<MazajCard>();
+        public List<MazajCard> Cards = new();
 
-        public bool Started = false;
+        public bool Started;
 
-        public int CurrentTeamIndex = 0;
+        public int CurrentTeamIndex;
 
         public string CurrentTeam
         {
@@ -106,19 +124,24 @@ string password = katm.iraqi
                 return;
 
             CurrentTeamIndex =
-                (CurrentTeamIndex + 1) % TeamNames.Count;
+                (CurrentTeamIndex + 1) %
+                TeamNames.Count;
         }
     }
+
+    // ==============================
+    // أوامر مزاج
+    // ==============================
 
     public class MazajGameCommands : WolfContext
     {
         private static readonly Dictionary<long, MazajGame> Games =
-            new Dictionary<long, MazajGame>();
+            new();
 
         private static readonly Random Random =
-            new Random();
+            new();
 
-        private static readonly string[] AllColors =
+        private static readonly string[] AllTeams =
         {
             "احمر",
             "ازرق",
@@ -126,9 +149,12 @@ string password = katm.iraqi
             "بنفسجي"
         };
 
-        // الأسماء الخاصة التي طلبتها
+        // ==============================
+        // البطاقات الخاصة
+        // ==============================
+
         private static readonly Dictionary<string, int> SpecialCards =
-            new Dictionary<string, int>
+            new()
             {
                 { "ضربة الوحش محمد 🇮🇶❤️", 100 },
 
@@ -141,101 +167,165 @@ string password = katm.iraqi
                 { "لولو التعبانه", -50 },
                 { "نواره السلبيه", -50 },
 
-                { "ضربة ابو حامد", -50 },
-                { "ضربة حمدي الوزير", -50 },
-                { "ضربة حيدر بنكه", -50 },
-                { "ضربة جمو موسيقى", -50 },
+                { "ضربة ابو حامد", -75 },
+                { "ضربة حمدي الوزير", -75 },
+                { "ضربة حيدر بنكه", -75 },
+                { "ضربة جمو موسيقى", -75 },
 
-                { "ضربة اساور صاروخ باليستي", 75 },
-                { "صاروخ ارض ارض", 75 },
-                { "ضربة علي القويه", 75 },
-                { "ضربة ابو جنه", 75 }
+                { "ضربة اساور صاروخ باليستي", 100 },
+                { "صاروخ ارض ارض", 100 },
+                { "ضربة علي القويه", 100 },
+                { "ضربة ابو جنه", 100 }
             };
+
+        // ==============================
+        // !مزاج
+        // ==============================
 
         [Command("مزاج")]
         public async Task HandleMazaj(string message)
         {
-            long chatId = this.SourceId;
+            long chatId = SourceId;
 
             string userName =
-                this.SourceSubscriber?.Name ?? "لاعب";
+                SourceSubscriber?.Name ?? "لاعب";
 
-            var parts = (message ?? "")
-                .Trim()
-                .Split(
-                    ' ',
-                    StringSplitOptions.RemoveEmptyEntries
-                );
+            string[] parts =
+                (message ?? "")
+                    .Trim()
+                    .Split(
+                        ' ',
+                        StringSplitOptions.RemoveEmptyEntries
+                    );
 
+            // بدون أمر
             if (parts.Length == 0)
             {
                 await SendReply(
-                    "اكتب أمر بعد !مزاج\n\n" +
-                    "!مزاج جديد <النقاط> <عدد الفرق>\n" +
-                    "!مزاج انضم <اللون>\n" +
-                    "!مزاج تغيير <اللون>\n" +
-                    "!مزاج لاعبين\n" +
-                    "!مزاج بدء\n" +
-                    "!مزاج اختار <رقم>\n" +
-                    "!مزاج بطاقات\n" +
-                    "!مزاج مساعد
-                    string email = "katm.iraqi21@gmail.com";
-                    string password = "katm.iraqi";
+                    "🎭 أوامر مزاج 🎭\n\n" +
 
+                    "!مزاج جديد <النقاط> <عدد الفرق>\n" +
+
+                    "!مزاج انضم <اللون>\n" +
+
+                    "!مزاج تغيير <اللون>\n" +
+
+                    "!مزاج لاعبين\n" +
+
+                    "!مزاج بدء\n" +
+
+                    "!مزاج <رقم البطاقة>\n" +
+
+                    "!مزاج بطاقات\n" +
+
+                    "!مزاج مساعدة"
+                );
 
                 return;
             }
 
             string action = parts[0];
 
+            // =====================================
+            // اختيار البطاقة بالرقم مباشرة
+            // مثال:
+            // !مزاج 13
+            // !مزاج ١٣
+            // =====================================
+
+            if (int.TryParse(
+                    ToEnglishNumbers(action),
+                    out int directCardNumber))
+            {
+                await PickCard(
+                    chatId,
+                    directCardNumber,
+                    userName
+                );
+
+                return;
+            }
+
+            // =====================================
+            // باقي الأوامر
+            // =====================================
+
             switch (action)
             {
                 case "جديد":
-                    await CreateGame(chatId, parts);
+
+                    await CreateGame(
+                        chatId,
+                        parts
+                    );
+
                     break;
 
                 case "انضم":
+
                 case "تغيير":
-                    await JoinTeam(chatId, parts, userName);
+
+                    await JoinTeam(
+                        chatId,
+                        parts,
+                        userName
+                    );
+
                     break;
 
                 case "لاعبين":
+
                     await ShowPlayers(chatId);
+
                     break;
 
                 case "بدء":
-                    await StartGame(chatId);
-                    break;
 
-                case "اختار":
-                    await PickCard(chatId, parts, userName);
+                    await StartGame(chatId);
+
                     break;
 
                 case "بطاقات":
+
                     await ShowCards(chatId);
+
                     break;
 
                 case "مساعدة":
+
                     await ShowHelp();
+
                     break;
 
                 default:
+
                     await SendReply(
-                        "أمر غير معروف.\n" +
+                        "❌ الأمر غير معروف.\n\n" +
                         "اكتب !مزاج مساعدة"
                     );
+
                     break;
             }
         }
+
+        // ==============================
+        // إنشاء اللعبة
+        // ==============================
 
         private async Task CreateGame(
             long chatId,
             string[] parts)
         {
-            if (parts.Length < 3)
+            if (parts.Length < 3 ||
+                !int.TryParse(
+                    ToEnglishNumbers(parts[1]),
+                    out int points) ||
+                !int.TryParse(
+                    ToEnglishNumbers(parts[2]),
+                    out int teamCount))
             {
                 await SendReply(
-                    "الصيغة الصحيحة:\n" +
+                    "الصيغة الصحيحة:\n\n" +
                     "!مزاج جديد <النقاط> <عدد الفرق>\n\n" +
                     "مثال:\n" +
                     "!مزاج جديد 400 4"
@@ -244,37 +334,20 @@ string password = katm.iraqi
                 return;
             }
 
-            if (!TryParseNumber(parts[1], out int points))
-            {
-                await SendReply(
-                    "النقاط لازم تكون رقم."
-                );
-
-                return;
-            }
-
-            if (!TryParseNumber(parts[2], out int teamCount))
-            {
-                await SendReply(
-                    "عدد الفرق لازم يكون رقم."
-                );
-
-                return;
-            }
-
             if (points <= 0)
             {
                 await SendReply(
-                    "عدد النقاط لازم يكون أكبر من صفر."
+                    "❌ النقاط لازم تكون أكبر من صفر."
                 );
 
                 return;
             }
 
-            if (teamCount < 2 || teamCount > 4)
+            if (teamCount < 2 ||
+                teamCount > 4)
             {
                 await SendReply(
-                    "عدد الفرق لازم يكون بين 2 و4."
+                    "❌ عدد الفرق لازم يكون بين 2 و4."
                 );
 
                 return;
@@ -283,174 +356,180 @@ string password = katm.iraqi
             var game = new MazajGame
             {
                 TargetPoints = points,
-                TeamCount = teamCount
+
+                TeamCount = teamCount,
+
+                Started = false,
+
+                CurrentTeamIndex = 0
             };
 
-            for (int i = 0; i < teamCount; i++)
+            for (int i = 0;
+                 i < teamCount;
+                 i++)
             {
-                string color = AllColors[i];
+                string team =
+                    AllTeams[i];
 
-                game.TeamNames.Add(color);
-                game.Teams[color] =
+                game.TeamNames.Add(team);
+
+                game.Teams[team] =
                     new List<string>();
 
-                game.Scores[color] = 0;
+                game.Scores[team] = 0;
             }
 
             CreateCards(game);
 
-            Games[chatId] = game;
-
-            string teams =
-                string.Join(
-                    " - ",
-                    game.TeamNames);
+            Games[chatId] =
+                game;
 
             await SendReply(
                 "🎭🔥 لعبة مزاج جديدة 🔥🎭\n\n" +
+
                 $"🎯 النقاط المطلوبة: {points}\n" +
-                $"👥 الفرق: {teams}\n" +
+
+                $"👥 الفرق: " +
+                $"{string.Join(" - ", game.TeamNames)}\n" +
+
                 "🃏 عدد البطاقات: 65\n\n" +
+
                 "للانضمام:\n" +
-                "!مزاج انضم <اسم اللون>\n\n" +
+
+                "!مزاج انضم <اللون>\n\n" +
+
                 "مثال:\n" +
+
                 "!مزاج انضم احمر"
             );
         }
 
-        private void CreateCards(MazajGame game)
+        // ==============================
+        // إنشاء 65 بطاقة
+        // ==============================
+
+        private static void CreateCards(
+            MazajGame game)
         {
             game.Cards.Clear();
 
-            var specialCards =
-                SpecialCards
-                    .OrderBy(x => Random.Next())
-                    .ToList();
+            var names =
+                new List<string>();
 
-            int number = 1;
-
-            foreach (var special in specialCards)
+            // إضافة البطاقات الخاصة
+            foreach (var card in SpecialCards)
             {
-                game.Cards.Add(
-                    new MazajCard
-                    {
-                        Number = number,
-                        Name = special.Key,
-                        Points = special.Value,
-                        Picked = false
-                    });
-
-                number++;
+                names.Add(card.Key);
             }
 
-            string[] normalPositiveNames =
+            // البطاقات العادية
+            int normalNumber = 1;
+
+            while (names.Count < 65)
             {
-                "ضربة النجمة",
-                "الصاروخ السريع",
-                "ضربة الأبطال",
-                "الطلقة الذهبية",
-                "قوة الفريق",
-                "الضربة الملكية",
-                "الحظ الجميل",
-                "ضربة الصقر",
-                "النصر الكبير",
-                "ضربة البرق"
+                string name;
+
+                do
+                {
+                    name =
+                        Random.Next(0, 2) == 0
+
+                        ? $"ضربة عشوائية {normalNumber}"
+
+                        : $"بطاقة حظ {normalNumber}";
+
+                    normalNumber++;
+
+                }
+                while (names.Contains(name));
+
+                names.Add(name);
+            }
+
+            // خلط البطاقات
+            names =
+                names
+                    .OrderBy(_ => Random.Next())
+                    .ToList();
+
+            int[] normalValues =
+            {
+                -100,
+                -75,
+                -50,
+                -25,
+                25,
+                50,
+                75,
+                100
             };
 
-            string[] normalNegativeNames =
+            for (int i = 0;
+                 i < 65;
+                 i++)
             {
-                "ضربة الحظ السيئ",
-                "تعطيل الحظ",
-                "ضربة المفاجأة",
-                "خصم مفاجئ",
-                "نحس البطاقة",
-                "الضربة الباردة",
-                "خسارة صغيرة",
-                "خصم الحظ",
-                "ضربة النحس",
-                "العثرة"
-            };
-
-            while (game.Cards.Count < 65)
-            {
-                bool positive =
-                    Random.Next(0, 2) == 0;
+                string name =
+                    names[i];
 
                 int value;
 
-                if (positive)
+                if (SpecialCards.TryGetValue(
+                        name,
+                        out int specialValue))
                 {
-                    value = Random.Next(10, 101);
+                    value =
+                        specialValue;
                 }
                 else
                 {
-                    value = -Random.Next(10, 101);
-                }
-
-                string name;
-
-                if (positive)
-                {
-                    name =
-                        normalPositiveNames[
+                    value =
+                        normalValues[
                             Random.Next(
-                                normalPositiveNames.Length)];
-                }
-                else
-                {
-                    name =
-                        normalNegativeNames[
-                            Random.Next(
-                                normalNegativeNames.Length)];
+                                normalValues.Length)
+                        ];
                 }
 
                 game.Cards.Add(
                     new MazajCard
                     {
-                        Number = number,
+                        Number = i + 1,
+
                         Name = name,
+
                         Points = value,
+
                         Picked = false
-                    });
-
-                number++;
-            }
-
-            // خلط البطاقات حتى لا تكون الأسماء المهمة
-            // بأرقام ثابتة
-            game.Cards =
-                game.Cards
-                    .OrderBy(x => Random.Next())
-                    .ToList();
-
-            // إعادة ترقيم البطاقات من 1 إلى 65
-            for (int i = 0; i < game.Cards.Count; i++)
-            {
-                game.Cards[i].Number = i + 1;
+                    }
+                );
             }
         }
+
+        // ==============================
+        // الانضمام للفريق
+        // ==============================
 
         private async Task JoinTeam(
             long chatId,
             string[] parts,
             string userName)
         {
-            if (!Games.ContainsKey(chatId))
+            if (!Games.TryGetValue(
+                    chatId,
+                    out var game))
             {
                 await SendReply(
-                    "ماكو لعبة شغالة حالياً.\n" +
-                    "اكتب !مزاج جديد"
+                    "❌ ماكو لعبة شغالة حالياً.\n\n" +
+                    "اكتب:\n" +
+                    "!مزاج جديد 400 4"
                 );
 
                 return;
             }
 
-            var game = Games[chatId];
-
             if (game.Started)
             {
                 await SendReply(
-                    "اللعبة بدت، ما تكدر تنضم أو تغير الفريق."
+                    "❌ اللعبة بدت، ما تكدر تنضم أو تغير الفريق."
                 );
 
                 return;
@@ -459,7 +538,7 @@ string password = katm.iraqi
             if (parts.Length < 2)
             {
                 await SendReply(
-                    "حدد اللون:\n" +
+                    "حدد الفريق:\n" +
                     string.Join(
                         " - ",
                         game.TeamNames)
@@ -468,13 +547,14 @@ string password = katm.iraqi
                 return;
             }
 
-            string team = parts[1];
+            string team =
+                parts[1];
 
             if (!game.Teams.ContainsKey(team))
             {
                 await SendReply(
-                    "هذا اللون غير موجود.\n" +
-                    "الألوان:\n" +
+                    "❌ هذا الفريق غير موجود.\n\n" +
+                    "المتاح:\n" +
                     string.Join(
                         " - ",
                         game.TeamNames)
@@ -483,127 +563,160 @@ string password = katm.iraqi
                 return;
             }
 
+            // إزالة اللاعب من أي فريق سابق
             foreach (var players in game.Teams.Values)
             {
                 players.Remove(userName);
             }
 
-            game.Teams[team].Add(userName);
+            game.Teams[team]
+                .Add(userName);
 
             await SendReply(
                 $"👤 {userName}\n" +
-                $"انضم لفريق {team} ✅"
+                $"✅ انضم إلى فريق {team}"
             );
         }
 
-        private async Task ShowPlayers(long chatId)
+        // ==============================
+        // عرض اللاعبين
+        // ==============================
+
+        private async Task ShowPlayers(
+            long chatId)
         {
-            if (!Games.ContainsKey(chatId))
+            if (!Games.TryGetValue(
+                    chatId,
+                    out var game))
             {
                 await SendReply(
-                    "ماكو لعبة شغالة حالياً."
+                    "❌ ماكو لعبة شغالة حالياً."
                 );
 
                 return;
             }
 
-            var game = Games[chatId];
-
             string result =
                 $"👥 اللاعبين ({game.TotalJoined})\n\n";
 
-            foreach (var team in game.Teams)
+            foreach (string team in game.TeamNames)
             {
-                string players =
-                    team.Value.Count > 0
-                        ? string.Join(
-                            "، ",
-                            team.Value)
-                        : "لا يوجد";
+                var players =
+                    game.Teams[team];
 
                 result +=
-                    $"🔴 {team.Key} " +
-                    $"({team.Value.Count}): " +
-                    $"{players}\n";
+                    $"🔹 {team} " +
+                    $"({players.Count}): " +
+
+                    (
+                        players.Count == 0
+                            ? "لا يوجد"
+                            : string.Join(
+                                "، ",
+                                players)
+                    ) +
+
+                    "\n";
             }
 
             await SendReply(result);
         }
 
-        private async Task StartGame(long chatId)
+        // ==============================
+        // بدء اللعبة
+        // ==============================
+
+        private async Task StartGame(
+            long chatId)
         {
-            if (!Games.ContainsKey(chatId))
+            if (!Games.TryGetValue(
+                    chatId,
+                    out var game))
             {
                 await SendReply(
-                    "ماكو لعبة شغالة حالياً."
+                    "❌ ماكو لعبة شغالة حالياً."
                 );
 
                 return;
             }
-
-            var game = Games[chatId];
 
             if (game.Started)
             {
                 await SendReply(
-                    "اللعبة بدأت مسبقاً."
+                    "❌ اللعبة بدأت مسبقاً."
                 );
 
                 return;
             }
 
-            var teamsWithPlayers =
-                game.Teams
-                    .Where(x => x.Value.Count > 0)
-                    .Select(x => x.Key)
+            var activeTeams =
+                game.TeamNames
+                    .Where(
+                        t =>
+                            game.Teams[t].Count > 0
+                    )
                     .ToList();
 
-            if (teamsWithPlayers.Count < 2)
+            if (activeTeams.Count < 2)
             {
                 await SendReply(
-                    "لازم يكون عندنا لاعبين بفريقين على الأقل."
+                    "❌ لازم يكون أكو لاعبين بفريقين على الأقل."
                 );
 
                 return;
             }
 
             game.TeamNames =
-                teamsWithPlayers;
+                activeTeams;
 
-            game.Started = true;
-            game.CurrentTeamIndex = 0;
+            game.Started =
+                true;
+
+            game.CurrentTeamIndex =
+                0;
 
             await SendReply(
                 "🎭🔥 اللعبة بدأت 🔥🎭\n\n" +
-                $"الدور الآن على فريق: {game.CurrentTeam}\n\n" +
-                "اختاروا بطاقة:\n" +
-                "!مزاج اختار <رقم>\n\n" +
-                "مثال:\n" +
-                "!مزاج اختار 13"
+
+                $"🎯 الدور الآن على فريق: " +
+                $"{game.CurrentTeam}\n\n" +
+
+                "🃏 اختاروا بطاقة بإرسال رقمها فقط:\n\n" +
+
+                "!مزاج 13\n" +
+
+                "أو:\n" +
+
+                "!مزاج ١٣"
             );
         }
 
+        // ==============================
+        // اختيار البطاقة
+        // ==============================
+
         private async Task PickCard(
             long chatId,
-            string[] parts,
+            int cardNumber,
             string userName)
         {
-            if (!Games.ContainsKey(chatId))
+            if (!Games.TryGetValue(
+                    chatId,
+                    out var game))
             {
                 await SendReply(
-                    "ماكو لعبة شغالة حالياً."
+                    "❌ ماكو لعبة شغالة حالياً."
                 );
 
                 return;
             }
 
-            var game = Games[chatId];
-
             if (!game.Started)
             {
                 await SendReply(
-                    "اللعبة لسه ما بدت.\n" +
-                    "اكتب !مزاج بدء"
+                    "❌ اللعبة لسه ما بدت.\n\n" +
+                    "اكتب:\n" +
+                    "!مزاج بدء"
                 );
 
                 return;
@@ -612,74 +725,74 @@ string password = katm.iraqi
             string playerTeam =
                 game.Teams
                     .FirstOrDefault(
-                        x => x.Value.Contains(userName))
+                        t =>
+                            t.Value.Contains(
+                                userName))
                     .Key;
 
-            if (string.IsNullOrEmpty(playerTeam))
+            if (string.IsNullOrEmpty(
+                    playerTeam))
             {
                 await SendReply(
-                    "انت مو منضم لأي فريق."
+                    "❌ أنت مو منضم لأي فريق."
                 );
 
                 return;
             }
 
-            if (playerTeam != game.CurrentTeam)
+            if (playerTeam !=
+                game.CurrentTeam)
             {
                 await SendReply(
-                    $"⏳ استنى دورك!\n" +
-                    $"الدور الآن على فريق {game.CurrentTeam}"
-                );
-
-                return;
-            }
-
-            if (parts.Length < 2)
-            {
-                await SendReply(
-                    "حدد رقم البطاقة.\n" +
-                    "مثال: !مزاج اختار 13"
-                );
-
-                return;
-            }
-
-            if (!TryParseNumber(
-                    parts[1],
-                    out int cardNumber))
-            {
-                await SendReply(
-                    "رقم البطاقة غير صحيح."
+                    $"⏳ استنى دورك!\n\n" +
+                    $"🎯 الدور الآن على فريق " +
+                    $"{game.CurrentTeam}"
                 );
 
                 return;
             }
 
             if (cardNumber < 1 ||
-                cardNumber > game.Cards.Count)
+                cardNumber > 65)
             {
                 await SendReply(
-                    $"رقم البطاقة لازم يكون بين 1 و {game.Cards.Count}."
+                    "❌ رقم البطاقة لازم يكون بين 1 و65."
                 );
 
                 return;
             }
 
-            var card =
+            MazajCard? card =
                 game.Cards
-                    .First(x => x.Number == cardNumber);
+                    .FirstOrDefault(
+                        c =>
+                            c.Number ==
+                            cardNumber);
+
+            if (card == null)
+            {
+                await SendReply(
+                    "❌ البطاقة غير موجودة."
+                );
+
+                return;
+            }
 
             if (card.Picked)
             {
                 await SendReply(
-                    "❌ هذه البطاقة مأخوذة، اختار بطاقة ثانية."
+                    "❌ هذه البطاقة مأخوذة.\n" +
+                    "اختار رقم بطاقة ثانية."
                 );
 
                 return;
             }
 
-            card.Picked = true;
+            // تسجيل البطاقة
+            card.Picked =
+                true;
 
+            // إضافة النقاط
             game.Scores[playerTeam] +=
                 card.Points;
 
@@ -689,34 +802,36 @@ string password = katm.iraqi
                     : card.Points.ToString();
 
             await SendReply(
-                $"🃏 البطاقة رقم {card.Number}\n\n" +
+                $"🃏 بطاقة رقم {card.Number}\n\n" +
+
                 $"🎭 {card.Name}\n" +
+
                 $"💰 النقاط: {pointsText}\n\n" +
-                $"فريق {playerTeam}: " +
+
+                $"🏳️ فريق {playerTeam}\n" +
+
+                $"📊 الرصيد: " +
                 $"{game.Scores[playerTeam]} نقطة"
             );
 
-            // الفوز إذا وصل فريق للنقاط المطلوبة
+            // الفوز عند الوصول للنقاط المطلوبة
             if (game.Scores[playerTeam] >=
                 game.TargetPoints)
             {
-                await EndGame(
-                    chatId,
-                    $"وصل فريق {playerTeam} إلى " +
-                    $"{game.TargetPoints} نقطة.");
+                await EndGame(chatId);
 
                 return;
             }
 
+            // إذا خلصت البطاقات
             if (game.RemainingCards == 0)
             {
-                await EndGame(
-                    chatId,
-                    "خلصت جميع البطاقات.");
+                await EndGame(chatId);
 
                 return;
             }
 
+            // الدور للفريق التالي
             game.NextTurn();
 
             await SendReply(
@@ -725,18 +840,23 @@ string password = katm.iraqi
             );
         }
 
-        private async Task ShowCards(long chatId)
+        // ==============================
+        // عرض البطاقات
+        // ==============================
+
+        private async Task ShowCards(
+            long chatId)
         {
-            if (!Games.ContainsKey(chatId))
+            if (!Games.TryGetValue(
+                    chatId,
+                    out var game))
             {
                 await SendReply(
-                    "ماكو لعبة شغالة حالياً."
+                    "❌ ماكو لعبة شغالة حالياً."
                 );
 
                 return;
             }
-
-            var game = Games[chatId];
 
             string result =
                 "🃏 بطاقات مزاج\n\n";
@@ -745,67 +865,91 @@ string password = katm.iraqi
             {
                 result +=
                     card.Picked
-                        ? $"{card.Number}: ✕\n"
-                        : $"{card.Number}: 🃏\n";
+
+                        ? $"❌ {card.Number}\n"
+
+                        : $"🟢 {card.Number}\n";
             }
 
             result +=
-                $"\nالمتبقي: {game.RemainingCards}";
+                $"\n📦 البطاقات المتبقية: " +
+                $"{game.RemainingCards}";
 
             if (game.Started)
             {
                 result +=
-                    $"\nالدور: {game.CurrentTeam}";
+                    $"\n🎯 الدور: " +
+                    $"{game.CurrentTeam}";
             }
 
             await SendReply(result);
         }
 
-        private async Task EndGame(
-            long chatId,
-            string reason)
-        {
-            var game = Games[chatId];
+        // ==============================
+        // نهاية اللعبة
+        // ==============================
 
-            var sorted =
+        private async Task EndGame(
+            long chatId)
+        {
+            if (!Games.TryGetValue(
+                    chatId,
+                    out var game))
+            {
+                return;
+            }
+
+            var standings =
                 game.Scores
-                    .OrderByDescending(x => x.Value)
+                    .OrderByDescending(
+                        x => x.Value)
                     .ToList();
 
             string winner =
-                sorted.First().Key;
+                standings[0].Key;
 
-            string standings =
+            string scores =
                 string.Join(
                     "\n",
-                    sorted.Select(
+                    standings.Select(
                         x =>
-                            $"{x.Key}: {x.Value} نقطة"));
+                            $"🏆 {x.Key}: " +
+                            $"{x.Value} نقطة"
+                    )
+                );
 
             await SendReply(
-                "🏆🎭 انتهت لعبة مزاج 🎭🏆\n\n" +
-                $"{reason}\n\n" +
-                "📊 النتائج:\n" +
-                $"{standings}\n\n" +
-                $"👑 الفريق الفائز: {winner}"
+                "🏁🎭 انتهت لعبة مزاج 🎭🏁\n\n" +
+
+                "📊 النتائج:\n\n" +
+
+                scores +
+
+                "\n\n" +
+
+                $"🥇 الفريق الفائز: {winner}"
             );
 
             Games.Remove(chatId);
         }
 
+        // ==============================
+        // المساعدة
+        // ==============================
+
         private async Task ShowHelp()
         {
             await SendReply(
-                "🎭 أوامر بوت مزاج 🎭\n\n" +
+                "🎭🔥 أوامر بوت مزاج 🔥🎭\n\n" +
 
                 "🆕 إنشاء لعبة:\n" +
-                "!مزاج جديد <النقاط> <الفرق>\n\n" +
+                "!مزاج جديد 400 4\n\n" +
 
                 "👥 الانضمام:\n" +
-                "!مزاج انضم <اللون>\n\n" +
+                "!مزاج انضم احمر\n\n" +
 
                 "🔄 تغيير الفريق:\n" +
-                "!مزاج تغيير <اللون>\n\n" +
+                "!مزاج تغيير ازرق\n\n" +
 
                 "👤 اللاعبين:\n" +
                 "!مزاج لاعبين\n\n" +
@@ -814,7 +958,8 @@ string password = katm.iraqi
                 "!مزاج بدء\n\n" +
 
                 "🃏 اختيار بطاقة:\n" +
-                "!مزاج اختار <رقم>\n\n" +
+                "!مزاج 13\n" +
+                "!مزاج ١٣\n\n" +
 
                 "📋 عرض البطاقات:\n" +
                 "!مزاج بطاقات\n\n" +
@@ -822,24 +967,27 @@ string password = katm.iraqi
                 "❓ المساعدة:\n" +
                 "!مزاج مساعدة\n\n" +
 
-                "🎨 الألوان:\n" +
-                "احمر - ازرق - اصفر - بنفسجي\n\n" +
+                "🎨 الفرق:\n" +
+                "🔴 احمر\n" +
+                "🔵 ازرق\n" +
+                "🟡 اصفر\n" +
+                "🟣 بنفسجي\n\n" +
 
-                "🔢 يقبل البوت الأرقام العربية والإنكليزية."
+                "🔢 الأرقام العربية والإنكليزية مدعومة."
             );
         }
 
-        // يحول:
-        // ١٢٣٤٥٦٧٨٩٠
-        // إلى:
-        // 1234567890
-        private static string NormalizeArabicNumbers(
-            string input)
-        {
-            if (string.IsNullOrEmpty(input))
-                return input;
+        // ==============================
+        // تحويل الأرقام العربية
+        // ==============================
 
-            return input
+        private static string ToEnglishNumbers(
+            string text)
+        {
+            if (string.IsNullOrEmpty(text))
+                return text;
+
+            return text
                 .Replace('٠', '0')
                 .Replace('١', '1')
                 .Replace('٢', '2')
@@ -852,22 +1000,14 @@ string password = katm.iraqi
                 .Replace('٩', '9');
         }
 
-        private static bool TryParseNumber(
-            string input,
-            out int number)
-        {
-            string normalized =
-                NormalizeArabicNumbers(
-                    input.Trim());
+        // ==============================
+        // إرسال الرد
+        // ==============================
 
-            return int.TryParse(
-                normalized,
-                out number);
-        }
-
-        private async Task SendReply(string text)
+        private async Task SendReply(
+            string text)
         {
-            await this.Reply(text);
+            await Reply(text);
         }
     }
 }
