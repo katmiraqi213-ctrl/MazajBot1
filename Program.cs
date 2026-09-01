@@ -1,4 +1,4 @@
-using System;
+sing SSystem;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -178,8 +178,10 @@ string password = katm.iraqi
                     "!مزاج بدء\n" +
                     "!مزاج اختار <رقم>\n" +
                     "!مزاج بطاقات\n" +
-                    "!مزاج مساعدة"
-                );
+                    "!مزاج مساعد
+                    string email = "katm.iraqi21@gmail.com";
+                    string password = "katm.iraqi";
+
 
                 return;
             }
